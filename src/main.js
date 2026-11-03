@@ -229,7 +229,15 @@ async function run() {
     core.warning(`Quod dependencies are off for this job (${e.message}); your install runs as always`)
   }
   try {
-    await taskCache(facts)
+    // GitHub's OIDC endpoint retries for minutes when it is slow; the task
+    // cache is never worth that. Past the deadline, tasks run as always.
+    let timer
+    await Promise.race([
+      taskCache(facts),
+      new Promise((_, no) => {
+        timer = setTimeout(() => no(new Error('no OIDC token or session within 10 s')), 10000)
+      }),
+    ]).finally(() => clearTimeout(timer))
   } catch (e) {
     core.warning(`Quod task cache is off for this job (${e.message}); tasks run as always`)
   }
@@ -401,4 +409,8 @@ async function vitest(mode) {
   return true
 }
 
-run().catch((e) => core.warning(`Quod is off for this job (${e.message})`))
+run()
+  .catch((e) => core.warning(`Quod is off for this job (${e.message})`))
+  // Whatever is still pending (a token request past its deadline) does not
+  // hold the step: everything this step does is done.
+  .finally(() => process.exit(0))
