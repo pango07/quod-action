@@ -7,7 +7,8 @@ command. The summary, the JSON/JUnit reports and the exit code are what a full
 
 ## Add Quod to your CI
 
-1. **One line in your CI job,** right after `actions/setup-node`:
+1. **One line in your test job,** right after `actions/setup-node`. Your install
+   and test commands stay as they are:
 
    ```yaml
          - uses: actions/setup-node@v4
@@ -18,68 +19,63 @@ command. The summary, the JSON/JUnit reports and the exit code are what a full
          - run: npx turbo run test          # unchanged: vitest goes through Quod
    ```
 
-2. **One new file, `.github/workflows/quod-shadow.yml`.** It records off the
-   critical path, after your CI finishes, and is never a check. Replace `CI` with
-   your workflow's `name:`, and use your own setup and test command:
+2. **One job in the same workflow file: the shadow.** It records after your test
+   job finishes, and it is never your check. Use your test job's id and your test
+   command:
 
    ```yaml
-   name: Quod shadow
-   on:
-     workflow_run:
-       workflows: [CI]
-       types: [completed]
-   permissions:
-     contents: read
-     actions: read
-   jobs:
-     record:
-       if: github.event.workflow_run.conclusion != 'cancelled' && github.event.workflow_run.head_repository.full_name == github.repository
-       runs-on: ubuntu-latest
-       steps:
-         - uses: actions/checkout@v4
-           with:
-             ref: ${{ github.event.workflow_run.head_sha }}
-         - uses: actions/setup-node@v4
-           with:
-             node-version: 24
-         - uses: pango07/quod-action@v1
-           with:
-             mode: shadow
-         - run: npm ci
-         - run: npx turbo run test
+     quod-shadow:
+       needs: check
+       uses: pango07/quod-action/.github/workflows/shadow.yml@v1
+       with: { test: npx turbo run test }
    ```
 
-3. **Merge it to your default branch.** GitHub runs `workflow_run` workflows
-   only from the default branch. Until the shadow has recorded once, every test
-   file runs, at plain vitest speed.
+   Other inputs:
+   - `install` (default `npm ci`)
+   - `node-version` (default `24`)
+   - `cache` (setup-node's cache; default `npm`)
+   - `fetch-depth` (default `0`)
+   - `working-directory`
 
-To turn it off, set `QUOD_DISABLE: 1` in the job's or the workflow's `env`, or
-remove the line.
+3. **Push.** The first run runs every test file, at plain vitest speed, and its
+   shadow records them. From the next commit on, only what changed runs.
+
+**Quod Cloud (optional):** give both jobs `permissions: { id-token: write,
+contents: read }`. The ledger then lives on Quod Cloud, which finds the nearest
+recorded ancestor commit, and the Actions cache stays the fallback. Without that
+permission, the Actions cache alone carries the ledger.
+
+**Turning it off:** set `QUOD_DISABLE: 1` in the job's or the workflow's `env`
+for plain vitest, or remove the line and the job.
 
 ## What happens
 
-- **Your CI job (`mode: check`)** installs quod and restores the newest
-  recording through `actions/cache`. It tries your branch first, then the pull
-  request's base, then the default branch. It then puts a `node` shim first
-  on `PATH`, which preloads a small hook into each node process. Every one-shot `vitest run` started in that job (through
-  npm scripts, npx, turbo or `node_modules/.bin`) becomes
-  `quod vitest --no-record` with the same arguments. Unchanged files replay, and
-  the rest run as plain vitest without instrumentation. The ledger is only read.
-  A post step uploads each run's per-test results as an artifact.
-- **The shadow (`mode: shadow`)** runs the same command with recording. It
-  records only a file whose tests did exactly what they did in your CI run, so
-  recording can never change a result. It audits a few replayed files and saves
-  the ledger for this commit. Its exit code is diagnostics only.
+- **Your test job (`mode: check`):**
+  - installs quod and restores the newest recording. It tries your branch first,
+    then the pull request's base, then the default branch.
+  - puts a `node` shim first on `PATH`, which preloads a small hook into each
+    node process.
+  - turns every one-shot `vitest run` started in the job (through npm scripts,
+    npx, turbo, pnpm or `node_modules/.bin`) into `quod vitest --no-record` with
+    the same arguments. Unchanged files replay; the rest run as plain vitest
+    without instrumentation. The ledger is only read.
+  - uploads each run's per-test results as an artifact in a post step.
+- **The shadow (`mode: shadow`):**
+  - runs the same command with recording.
+  - records a file only if its tests did exactly what they did in your job, so
+    recording can never change a result.
+  - audits a few replayed files and saves the ledger for this commit.
+  - its exit code is diagnostics only.
 - **Stays plain vitest:**
   - watch mode, `--coverage`, `-u`, `--ui`, `--browser`, `--shard`,
     `--changed`
   - anything outside Linux x64
   - any failure to install quod
-
-  A test that failed, spawned a process, used the network or wrote into the
-  repository always runs.
+- **Always runs:** a test that failed, spawned a process, used the network or
+  wrote into the repository.
 - **Trust:** the shadow never records a fork's pull request. A ledger is an
   input that can make a test report "pass" without running, so only code from
   your own repository writes one.
 
-Requirements: vitest 4.x, Node 22.15+ (`module.registerHooks`).
+Requirements: vitest 4.x, Node 22.15+ (`module.registerHooks`), a Linux x64
+runner.

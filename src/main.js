@@ -14,6 +14,7 @@ const { paths, scope, keys } = require('./common')
 // SHA-256 of each release's quod-linux-x86_64.tar.gz.
 const PINS = {
   'bin-cd358c8': 'f7bd0b7b33437582a2fd6d592ea286c6aae6a66195a13310223dc51e037c5d19',
+  'bin-a084b71': 'c0ff034eecf8154af122440e9ff48f1ffcdeddbb0a2f495ce5ef71af20129519',
 }
 
 async function install(version, want) {
@@ -69,10 +70,14 @@ async function run() {
   if (mode === 'shadow') {
     // The CI run's reports: what each test did there, uninstrumented. A file
     // records only if it does the same here.
+    // From this workflow run (the shadow job of your CI workflow), or from
+    // the CI run that triggered this one (a workflow_run shadow).
     const client = new DefaultArtifactClient()
     const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/')
-    const findBy = { token: core.getInput('token'), workflowRunId: s.runId, repositoryOwner: owner, repositoryName: repo }
-    const { artifacts } = await client.listArtifacts({ findBy })
+    const findBy = s.runId
+      ? { token: core.getInput('token'), workflowRunId: s.runId, repositoryOwner: owner, repositoryName: repo }
+      : undefined
+    const { artifacts } = await client.listArtifacts({ latest: true, findBy })
     const mine = artifacts.filter((a) => a.name.startsWith('quod-vitest-reports-'))
     if (!mine.length) core.warning('Quod: the CI run left no test reports; nothing that runs here is recorded')
     for (const a of mine) await client.downloadArtifact(a.id, { path: paths.reports, findBy })
@@ -85,10 +90,30 @@ async function run() {
   // variables from its tasks, but every runner keeps PATH.
   const node = execFileSync('sh', ['-c', 'command -v node'], { encoding: 'utf8' }).trim()
   if (!node) throw new Error('no node on PATH: put this step after actions/setup-node')
+  // Quod Cloud, when this quod has it and the job may ask GitHub for an OIDC
+  // token (`permissions: id-token: write`): quod then stores and finds the
+  // ledger on the server (nearest recorded ancestor commit), and the cache
+  // restored above stays the fallback. Otherwise the cache alone.
+  let cloud = null
+  if (core.getInput('cloud') !== 'false') {
+    let help = ''
+    try {
+      help = execFileSync(quod, ['vitest', '--help'], { encoding: 'utf8' })
+    } catch {}
+    if (!help.includes('--cloud')) core.info('Quod: ledger hand-off through the Actions cache (this quod has no --cloud)')
+    else if (!process.env.ACTIONS_ID_TOKEN_REQUEST_URL)
+      core.info('Quod: ledger hand-off through the Actions cache (Quod Cloud needs `permissions: id-token: write`)')
+    else
+      cloud = {
+        QUOD_SERVER: core.getInput('server'),
+        QUOD_SERVER_KEY: core.getInput('server-key'),
+        QUOD_JOB_ID: core.getInput('job-id'),
+      }
+  }
   fs.copyFileSync(path.join(__dirname, '..', '..', 'hook.cjs'), paths.hook)
   fs.writeFileSync(
     paths.config,
-    JSON.stringify({ quod, mode, ledgers: paths.ledgers, reports: paths.reports, root: process.env.GITHUB_WORKSPACE }),
+    JSON.stringify({ quod, mode, ledgers: paths.ledgers, reports: paths.reports, root: process.env.GITHUB_WORKSPACE, cloud }),
   )
   const bin = path.join(paths.base, 'bin')
   fs.mkdirSync(bin, { recursive: true })

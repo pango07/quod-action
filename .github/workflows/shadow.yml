@@ -1,0 +1,62 @@
+# Quod's shadow, as a job of your CI workflow:
+#
+#   quod-shadow:
+#     needs: check                      # your test job
+#     uses: pango07/quod-action/.github/workflows/shadow.yml@v1
+#     with: { test: npx turbo run test }
+#
+# It runs after your test job, from the same commit and with the same setup:
+# checkout, setup-node, the install, your test command with recording. Each
+# test file records only if its tests did exactly what they did in your job
+# (that job's reports, an artifact of this run). It audits replays and saves
+# the ledger. It is never your check: it starts after the check finished,
+# every step tolerates failure, and a fork's pull request is never recorded.
+name: Quod shadow
+on:
+  workflow_call:
+    inputs:
+      test:
+        description: Your test command, as your test job runs it
+        type: string
+        required: true
+      install:
+        description: Your install command
+        type: string
+        default: npm ci
+      node-version:
+        type: string
+        default: '24'
+      cache:
+        description: actions/setup-node's `cache` (npm, pnpm, yarn; empty for none)
+        type: string
+        default: npm
+      fetch-depth:
+        description: actions/checkout's fetch-depth (as your test job's)
+        type: number
+        default: 0
+      working-directory:
+        type: string
+        default: .
+jobs:
+  record:
+    if: ${{ !cancelled() && github.event.pull_request.head.repo.fork != true }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ inputs.fetch-depth }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: ${{ inputs.cache }}
+      - uses: pango07/quod-action@v1
+        with:
+          mode: shadow
+      - name: Install
+        working-directory: ${{ inputs.working-directory }}
+        run: ${{ inputs.install }}
+      - name: Record
+        working-directory: ${{ inputs.working-directory }}
+        run: ${{ inputs.test }}

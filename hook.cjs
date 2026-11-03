@@ -53,11 +53,17 @@
   const dir = path.join(cfg.ledgers, id)
   const report = path.join(cfg.reports, `${id}.json`)
   fs.mkdirSync(cfg.reports, { recursive: true })
+  // With Quod Cloud the ledger is the suite's on the server (the cache's
+  // copy in `dir` is the fallback); its variables are quod's, not the tests'.
+  const cloud = cfg.cloud ? ['--cloud', '--suite', id] : []
   const q =
     cfg.mode === 'shadow'
-      ? ['vitest', '--dir', dir, '--audits', '4', '--expect-report', report, '--', 'run', ...args]
-      : ['vitest', '--no-record', '--dir', dir, '--report', report, '--', 'run', ...args]
-  const r = require('node:child_process').spawnSync(cfg.quod, q, { stdio: 'inherit', env: { ...env, QUOD_SHIM_ACTIVE: '1' } })
+      ? ['vitest', '--dir', dir, ...cloud, '--audits', '4', '--expect-report', report, '--', 'run', ...args]
+      : ['vitest', '--no-record', '--dir', dir, ...cloud, '--report', report, '--', 'run', ...args]
+  const r = require('node:child_process').spawnSync(cfg.quod, q, {
+    stdio: 'inherit',
+    env: { ...env, ...(cfg.cloud ?? {}), QUOD_SHIM_ACTIVE: '1' },
+  })
   if (r.error) {
     console.error(`quod: could not start (${r.error.message}); running vitest itself`)
     return

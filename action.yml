@@ -13,20 +13,39 @@ inputs:
     description: >
       check (default): your CI job. Every `vitest run` replays what the last
       recording proves unchanged and runs the rest; the ledger is only read.
-      shadow: the recording workflow (on workflow_run of your CI); runs the
-      same command with recording, audits, and saves the ledger.
+      shadow: the recording job (pango07/quod-action/.github/workflows/shadow.yml,
+      after your CI job in the same workflow); runs the same command with
+      recording, audits, and saves the ledger.
     required: false
     default: check
   version:
     description: The quod release (a bin-<sha> release of pango07/ci-bench)
     required: false
-    default: bin-cd358c8
+    default: bin-a084b71
   sha256:
     description: SHA-256 of that release's quod-linux-x86_64.tar.gz (required when version is set)
     required: false
     default: ''
+  cloud:
+    description: >
+      Use Quod Cloud for the ledger when this quod supports it and the job has
+      `permissions: id-token: write` (true); false keeps it in the Actions cache.
+    required: false
+    default: 'true'
+  server:
+    description: The Quod Cloud server
+    required: false
+    default: https://api.quodci.com
+  server-key:
+    description: The server's Ed25519 public key (every answer is signed by it)
+    required: false
+    default: d23312bfc239da7dcd29c651dff3aea71beb08f0b3a732dff040f461a259f9f8
+  job-id:
+    description: This job's check run, for Quod Cloud's reports
+    required: false
+    default: ${{ job.check_run_id }}
   token:
-    description: Reads the CI run's report artifact (mode shadow)
+    description: Reads a triggering CI run's report artifact (a workflow_run shadow)
     required: false
     default: ${{ github.token }}
 runs:

@@ -1,6 +1,6 @@
 # The action on a small vitest project, the way a customer uses it: one
 # line, then the project's own test commands (an npm script, npx, the .bin
-# shim). quod-shadow.yml records after this run; the next run replays.
+# shim). The shadow job records after it; the next run replays.
 name: test
 on:
   push:
@@ -35,3 +35,13 @@ jobs:
           echo "import { test, expect } from 'vitest'; test('fails', () => expect(1).toBe(2))" > tests/fail.test.js
           if npx vitest run tests/fail.test.js; then echo "::error::a failing test passed"; exit 1; fi
           rm tests/fail.test.js
+
+  shadow:
+    needs: check
+    uses: ./.github/workflows/shadow.yml
+    with:
+      test: npm test && npx vitest run tests/add.test.js
+      install: npm install --no-audit --no-fund
+      cache: ''
+      fetch-depth: 1
+      working-directory: test
