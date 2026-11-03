@@ -7,7 +7,7 @@ command. The summary, the JSON/JUnit reports and the exit code are what a full
 
 ## Add Quod to your CI
 
-Pin the action and the workflow to the commit of the release, `V1SHA` (the
+Pin the action and the workflow to the commit of the release, `da78956941ad9a471fa9652e929bdafe71616c35` (the
 `v1` tag; `@v1` works too if your policy allows tags).
 
 1. **Permissions.** Quod Cloud keeps the ledger. It knows your job by its
@@ -31,7 +31,7 @@ Pin the action and the workflow to the commit of the release, `V1SHA` (the
          - uses: actions/setup-node@v4
            with:
              node-version: 24
-         - uses: pango07/quod-action@V1SHA # v1   ← this line
+         - uses: pango07/quod-action@da78956941ad9a471fa9652e929bdafe71616c35 # v1   ← this line
          - run: npm ci
          - run: npx turbo run test          # unchanged: vitest goes through Quod
    ```
@@ -46,7 +46,7 @@ Pin the action and the workflow to the commit of the release, `V1SHA` (the
        permissions:
          contents: read
          id-token: write
-       uses: pango07/quod-action/.github/workflows/shadow.yml@V1SHA # v1
+       uses: pango07/quod-action/.github/workflows/shadow.yml@da78956941ad9a471fa9652e929bdafe71616c35 # v1
        with: { test: npx turbo run test }
    ```
 
