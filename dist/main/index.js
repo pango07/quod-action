@@ -152732,6 +152732,7 @@ const PINS = {
   'bin-80284fe': '4b7d2cf542956168133d9427531d941f2b227a5c16bcc93e3d20d00062555ee7',
   'bin-0f9ef16': '4035f02e13977e7e4b9d29c67212d2d2cf6c26119c60337a585a70c9ecb876e0',
   'bin-0602b10': '0f0650b7cbcb024b1fc459d45ed96ea76ac4b330b380de4163cb6cf4a8824bea',
+  'bin-d03fb70': '3208a79fda5e4d66a3225428fd215b4a8d0726e376da13c7d019a358d9b50840',
 }
 
 async function install(version, want) {
@@ -152820,12 +152821,20 @@ async function run() {
     if (!help.includes('--cloud')) core.info('Quod: ledger hand-off through the Actions cache (this quod has no --cloud)')
     else if (!process.env.ACTIONS_ID_TOKEN_REQUEST_URL)
       core.info('Quod: ledger hand-off through the Actions cache (Quod Cloud needs `permissions: id-token: write`)')
-    else
-      cloud = {
-        QUOD_SERVER: core.getInput('server'),
-        QUOD_SERVER_KEY: core.getInput('server-key'),
-        QUOD_JOB_ID: core.getInput('job-id'),
+    else {
+      // quod --cloud starts from no ledger when the server cannot answer;
+      // the cache's copy is kept for exactly that case.
+      const server = core.getInput('server')
+      let up = false
+      try {
+        up = (await fetch(`${server}/healthz`, { signal: AbortSignal.timeout(5000) })).ok
+      } catch {}
+      if (!up) core.warning(`Quod: ${server} did not answer; ledger hand-off through the Actions cache`)
+      else {
+        cloud = { QUOD_SERVER: server, QUOD_SERVER_KEY: core.getInput('server-key'), QUOD_JOB_ID: core.getInput('job-id') }
+        core.info(`Quod: ledger hand-off through Quod Cloud (${server}); the Actions cache is the fallback`)
       }
+    }
   }
   fs.copyFileSync(path.join(__dirname, '..', '..', 'hook.cjs'), paths.hook)
   fs.writeFileSync(
