@@ -1,15 +1,16 @@
 'use strict'
-// Quod's vitest shim (pango07/quod-action). The action puts it in
-// NODE_OPTIONS (`--require`), so every node process of the job loads it; it
+// Quod's vitest shim (pango07/quod-action). The action's `node` shim, first
+// on PATH, preloads it (`--require`) into every node process of the job; it
 // does nothing unless the process is vitest's own command line (whatever
 // started it: a package script, npx, turbo, node_modules/.bin) doing a
 // one-shot run. Then it runs `quod vitest` with the same arguments instead
 // and exits with its code: the same output, reports and exit code as
 // vitest, with unchanged test files replayed.
 //
-// Never loops: quod and everything it starts get QUOD_SHIM_ACTIVE=1 and a
-// NODE_OPTIONS without this file. Falls back to plain vitest whenever it
-// cannot run quod (QUOD_DISABLE=1, no config, quod missing).
+// Never loops: quod and everything it starts get QUOD_SHIM_ACTIVE=1, which
+// makes the node shim run node without this file. Falls back to plain
+// vitest whenever it cannot run quod (QUOD_DISABLE=1, no config, quod
+// missing).
 ;(() => {
   const argv = process.argv
   const env = process.env
@@ -56,11 +57,7 @@
     cfg.mode === 'shadow'
       ? ['vitest', '--dir', dir, '--audits', '4', '--expect-report', report, '--', 'run', ...args]
       : ['vitest', '--no-record', '--dir', dir, '--report', report, '--', 'run', ...args]
-  const childEnv = { ...env, QUOD_SHIM_ACTIVE: '1' }
-  const opts = (env.NODE_OPTIONS ?? '').split(cfg.require).join(' ').trim()
-  if (opts) childEnv.NODE_OPTIONS = opts
-  else delete childEnv.NODE_OPTIONS
-  const r = require('node:child_process').spawnSync(cfg.quod, q, { stdio: 'inherit', env: childEnv })
+  const r = require('node:child_process').spawnSync(cfg.quod, q, { stdio: 'inherit', env: { ...env, QUOD_SHIM_ACTIVE: '1' } })
   if (r.error) {
     console.error(`quod: could not start (${r.error.message}); running vitest itself`)
     return

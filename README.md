@@ -60,8 +60,8 @@ remove the line.
 
 - **Your CI job (`mode: check`)** installs quod and restores the newest
   recording through `actions/cache`. It tries your branch first, then the pull
-  request's base, then the default branch. It then puts a small shim in
-  `NODE_OPTIONS`. Every one-shot `vitest run` started in that job (through
+  request's base, then the default branch. It then puts a `node` shim first
+  on `PATH`, which preloads a small hook into each node process. Every one-shot `vitest run` started in that job (through
   npm scripts, npx, turbo or `node_modules/.bin`) becomes
   `quod vitest --no-record` with the same arguments. Unchanged files replay, and
   the rest run as plain vitest without instrumentation. The ledger is only read.
