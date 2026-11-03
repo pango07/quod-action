@@ -152738,6 +152738,7 @@ const PINS = {
   'bin-48fec94': 'c22bffd824687790e12dc157249a080850dd9608c54b489be6ed67c7443dbd4d',
   'bin-3115603': '2c2dcf119575c5393080fbab8df1ba6f9b4cac54b52b77acacd2ecf959fc456f',
   'bin-48c22e3': '604d6c2237faa04bae0f232966b535394bbd1778e49cbda946c7d5d76a02d6a4',
+  'bin-d40c669': '398053199c63a76c4e35a47b43e13e59465e43311f497e84f4fb74a2ad329ac7',
 }
 
 async function install(version, want) {
@@ -152776,25 +152777,15 @@ async function run() {
     core.notice('Quod: not recording a fork pull request (its code is not trusted to write the ledger)')
     return
   }
-  const version = core.getInput('version')
-  const want = core.getInput('sha256') || PINS[version]
-  if (!want) throw new Error(`no sha256 for ${version}: set the sha256 input`)
-  const quod = await install(version, want)
-  core.info(`quod ${version} at ${quod}`)
-
   fs.mkdirSync(paths.ledgers, { recursive: true })
   fs.mkdirSync(paths.reports, { recursive: true })
-  const k = keys(s)
-  core.saveState('key', k.key)
-  const hit = await cache.restoreCache([paths.ledgers], k.key, k.restore)
-  core.saveState('hit', hit === k.key ? 'exact' : hit ? 'prefix' : '')
-  core.info(hit ? `Quod: the recording ${hit}` : 'Quod: no recording yet; every test file runs (and the shadow records them)')
-
+  let version = core.getInput('version')
+  let want = core.getInput('sha256') || PINS[version]
   if (mode === 'shadow') {
     // The CI run's reports: what each test did there, uninstrumented. A file
-    // records only if it does the same here.
-    // From this workflow run (the shadow job of your CI workflow), or from
-    // the CI run that triggered this one (a workflow_run shadow).
+    // records only if it does the same here. From this workflow run (the
+    // shadow job of your CI workflow), or from the CI run that triggered
+    // this one (a workflow_run shadow).
     const client = new DefaultArtifactClient()
     const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/')
     const findBy = s.runId
@@ -152804,7 +152795,29 @@ async function run() {
     const mine = artifacts.filter((a) => a.name.startsWith('quod-vitest-reports-'))
     if (!mine.length) core.warning('Quod: the CI run left no test reports; nothing that runs here is recorded')
     for (const a of mine) await client.downloadArtifact(a.id, { path: paths.reports, findBy })
+    // Record with the quod the test job ran. The `uses:` inside the shadow
+    // workflow cannot follow the caller's pin, so this action's own version
+    // may be another; a recording pairs only with a critical path of the
+    // same quod.
+    try {
+      const used = JSON.parse(fs.readFileSync(path.join(paths.reports, 'quod.json'), 'utf8'))
+      if (used.version && /^[0-9a-f]{64}$/.test(used.sha256 ?? '')) {
+        if (used.version !== version) core.info(`Quod: recording with ${used.version}, the quod your test job ran`)
+        version = used.version
+        want = used.sha256
+      }
+    } catch {}
   }
+  if (!want) throw new Error(`no sha256 for ${version}: set the sha256 input`)
+  const quod = await install(version, want)
+  core.info(`quod ${version} at ${quod}`)
+  core.saveState('version', JSON.stringify({ version, sha256: want }))
+
+  const k = keys(s)
+  core.saveState('key', k.key)
+  const hit = await cache.restoreCache([paths.ledgers], k.key, k.restore)
+  core.saveState('hit', hit === k.key ? 'exact' : hit ? 'prefix' : '')
+  core.info(hit ? `Quod: the recording ${hit}` : 'Quod: no recording yet; every test file runs (and the shadow records them)')
 
   // The shim: a `node` first on PATH that runs the real one with hook.cjs
   // preloaded. Whatever starts vitest (npm scripts, npx, turbo, pnpm, a

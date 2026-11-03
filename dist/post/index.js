@@ -152745,9 +152745,13 @@ async function run() {
   const mode = core.getState('mode')
   if (mode === 'check') {
     const files = fs.existsSync(paths.reports)
-      ? fs.readdirSync(paths.reports).filter((f) => f.endsWith('.json')).map((f) => path.join(paths.reports, f))
+      ? fs.readdirSync(paths.reports).filter((f) => f.endsWith('.json') && f !== 'quod.json').map((f) => path.join(paths.reports, f))
       : []
     if (!files.length) return
+    // Which quod ran here: the shadow records with the same one.
+    const meta = path.join(paths.reports, 'quod.json')
+    fs.writeFileSync(meta, core.getState('version'))
+    files.push(meta)
     const leak = leaks(files)
     if (leak) {
       core.warning(`Quod: the test reports contain the value of ${leak}; not uploaded (the shadow records nothing)`)
