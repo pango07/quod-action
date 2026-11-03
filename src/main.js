@@ -37,6 +37,7 @@ const PINS = {
   'bin-d40c669': '398053199c63a76c4e35a47b43e13e59465e43311f497e84f4fb74a2ad329ac7',
   'bin-c8a44d5': '1d30557dcab7e6118035e0f1b9076bde298b654376034af0c5b532b26eab67aa',
   'bin-d5fbfdc': 'ac4006cef111a3d09f3795a278b172b053daf4f11197feecb12f01278bbe26fb',
+  'bin-d978cc4': '0287d29bdf41ecb1e96ebb710e2c98c4c964924d87ff62af5121f0e67086d6f1',
 }
 
 async function install(version, want) {
@@ -364,6 +365,11 @@ async function vitest(mode) {
           QUOD_SERVER: server,
           QUOD_SERVER_KEY: core.getInput('server-key'),
           QUOD_JOB_ID: core.getInput('job-id'),
+          // Quod Cloud giving this job no ledger (down, 403, none yet) keeps
+          // the local one: the Actions cache's copy (scoped by GitHub as
+          // before Quod Cloud) or this job's own earlier recording, so the
+          // second witness can follow within and across jobs.
+          QUOD_VITEST_CLOUD_FALLBACK: '1',
           ACTIONS_ID_TOKEN_REQUEST_URL: process.env.ACTIONS_ID_TOKEN_REQUEST_URL,
           ACTIONS_ID_TOKEN_REQUEST_TOKEN: process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN,
         }
