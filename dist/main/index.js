@@ -90857,10 +90857,14 @@ function scope() {
   return { branch: process.env.GITHUB_REF_NAME, sha: process.env.GITHUB_SHA, fallback, trusted: true }
 }
 
+// A cache entry is immutable: each job that records saves its own (run,
+// attempt, job), so a re-run of a commit, which may be its second witness,
+// is kept too; a restore takes the newest under the branch's prefix.
 function keys(s) {
   const k = (b) => `quod-vitest-${b}-`
   const restore = [...new Set([s.branch, s.base, s.fallback].filter(Boolean).map(k))]
-  return { key: `${k(s.branch)}${s.sha}`, restore }
+  const job = [process.env.GITHUB_RUN_ID, process.env.GITHUB_RUN_ATTEMPT, process.env.GITHUB_JOB].filter(Boolean).join('-')
+  return { key: `${k(s.branch)}${s.sha}${job ? `-${job}` : ''}`, restore }
 }
 
 module.exports = { paths, scope, keys }
@@ -153054,6 +153058,8 @@ const PINS = {
   'bin-3115603': '2c2dcf119575c5393080fbab8df1ba6f9b4cac54b52b77acacd2ecf959fc456f',
   'bin-48c22e3': '604d6c2237faa04bae0f232966b535394bbd1778e49cbda946c7d5d76a02d6a4',
   'bin-d40c669': '398053199c63a76c4e35a47b43e13e59465e43311f497e84f4fb74a2ad329ac7',
+  'bin-c8a44d5': '1d30557dcab7e6118035e0f1b9076bde298b654376034af0c5b532b26eab67aa',
+  'bin-d5fbfdc': 'ac4006cef111a3d09f3795a278b172b053daf4f11197feecb12f01278bbe26fb',
 }
 
 async function install(version, want) {
@@ -153302,6 +153308,12 @@ async function vitest(mode) {
     core.notice('Quod: not recording a fork pull request (its code is not trusted to write the ledger)')
     return false
   }
+  // The check job records as it runs (its records replay once a second run
+  // agrees), unless it is a fork's pull request (read only: a fork's code
+  // never writes a ledger) or `record: false` (a setup with the shadow job).
+  const record = mode === 'check' && core.getInput('record') !== 'false' && s.trusted
+  if (mode === 'check' && !s.trusted) core.info('Quod: a fork pull request: replays only, records nothing')
+  core.saveState('record', record ? '1' : '')
   fs.mkdirSync(paths.ledgers, { recursive: true })
   fs.mkdirSync(paths.reports, { recursive: true })
   let version = core.getInput('version')
@@ -153342,7 +153354,7 @@ async function vitest(mode) {
   core.saveState('key', k.key)
   const hit = await cache.restoreCache([paths.ledgers], k.key, k.restore)
   core.saveState('hit', hit === k.key ? 'exact' : hit ? 'prefix' : '')
-  core.info(hit ? `Quod: the recording ${hit}` : 'Quod: no recording yet; every test file runs (and the shadow records them)')
+  core.info(hit ? `Quod: the recording ${hit}` : `Quod: no recording yet; every test file runs${record ? ' and records' : ''}`)
 
   // Quod Cloud, when this quod has it and the job may ask GitHub for an OIDC
   // token (`permissions: id-token: write`): quod then stores and finds the
@@ -153422,7 +153434,7 @@ async function vitest(mode) {
   }
   fs.writeFileSync(
     paths.config,
-    JSON.stringify({ quod, mode, ledgers: paths.ledgers, reports: paths.reports, root: process.env.GITHUB_WORKSPACE, cloud, prefetch }),
+    JSON.stringify({ quod, mode, record, ledgers: paths.ledgers, reports: paths.reports, root: process.env.GITHUB_WORKSPACE, cloud, prefetch }),
     { mode: 0o600 },
   )
   return true

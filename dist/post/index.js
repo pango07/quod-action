@@ -90857,10 +90857,14 @@ function scope() {
   return { branch: process.env.GITHUB_REF_NAME, sha: process.env.GITHUB_SHA, fallback, trusted: true }
 }
 
+// A cache entry is immutable: each job that records saves its own (run,
+// attempt, job), so a re-run of a commit, which may be its second witness,
+// is kept too; a restore takes the newest under the branch's prefix.
 function keys(s) {
   const k = (b) => `quod-vitest-${b}-`
   const restore = [...new Set([s.branch, s.base, s.fallback].filter(Boolean).map(k))]
-  return { key: `${k(s.branch)}${s.sha}`, restore }
+  const job = [process.env.GITHUB_RUN_ID, process.env.GITHUB_RUN_ATTEMPT, process.env.GITHUB_JOB].filter(Boolean).join('-')
+  return { key: `${k(s.branch)}${s.sha}${job ? `-${job}` : ''}`, restore }
 }
 
 module.exports = { paths, scope, keys }
@@ -153011,8 +153015,9 @@ var __webpack_exports__ = {};
 "use strict";
 
 // After the job: remove the config (it holds GitHub's OIDC request token
-// for quod); in the CI job, hand the tests' reports to the shadow (an
-// artifact of this run); in the shadow, save the ledger it recorded.
+// for quod); save the ledger the job recorded to the Actions cache (the
+// check job, or the older shadow); a read-only check job (`record: false`)
+// hands its tests' reports to the shadow (an artifact of this run).
 const core = __nccwpck_require__(37484)
 const cache = __nccwpck_require__(5116)
 const { DefaultArtifactClient } = __nccwpck_require__(76846)
@@ -153098,6 +153103,12 @@ async function run() {
     core.info(`Quod dependencies: not saved (${e.message})`)
   }
   const mode = core.getState('mode')
+  if (mode === 'check' && core.getState('record') === '1') {
+    // The ledger this job recorded, for the next job (Quod Cloud has it
+    // already when the job could use it; the cache is the fallback).
+    await saveLedger()
+    return
+  }
   if (mode === 'check') {
     const files = fs.existsSync(paths.reports)
       ? fs.readdirSync(paths.reports).filter((f) => f.endsWith('.json') && f !== 'quod.json').map((f) => path.join(paths.reports, f))
@@ -153117,20 +153128,26 @@ async function run() {
     core.info(`Quod: ${files.length} test reports for the shadow (${name})`)
     return
   }
-  if (mode === 'shadow') {
-    const key = core.getState('key')
-    if (core.getState('hit') === 'exact') {
-      core.info(`Quod: ${key} is already saved`)
-      return
-    }
-    const leak = fs.existsSync(paths.ledgers) ? leaks(walk(paths.ledgers)) : null
-    if (leak) {
-      core.warning(`Quod: the ledger contains the value of ${leak}; not saved to the Actions cache`)
-      return
-    }
-    await cache.saveCache([paths.ledgers], key)
-    core.info(`Quod: saved the recording as ${key}`)
+  if (mode === 'shadow') await saveLedger()
+}
+
+async function saveLedger() {
+  const key = core.getState('key')
+  if (core.getState('hit') === 'exact') {
+    core.info(`Quod: ${key} is already saved`)
+    return
   }
+  if (!fs.existsSync(paths.ledgers) || !walk(paths.ledgers).some((f) => f.endsWith('ledger.json'))) {
+    core.info('Quod: no ledger recorded in this job')
+    return
+  }
+  const leak = leaks(walk(paths.ledgers))
+  if (leak) {
+    core.warning(`Quod: the ledger contains the value of ${leak}; not saved to the Actions cache`)
+    return
+  }
+  await cache.saveCache([paths.ledgers], key)
+  core.info(`Quod: saved the recording as ${key}`)
 }
 
 run()
