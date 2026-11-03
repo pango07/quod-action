@@ -56,6 +56,31 @@
   // With Quod Cloud the ledger is the suite's on the server (the cache's
   // copy in `dir` is the fallback); its variables are quod's, not the tests'.
   const cloud = cfg.cloud ? ['--cloud', '--suite', id] : []
+  // The action started this suite's restore in the background: wait for it
+  // (quod then uses what it restored), at most 2 minutes; then stop it, so
+  // quod's own restore never shares the directory with it.
+  const state = cfg.cloud && cfg.prefetch ? path.join(cfg.prefetch, id) : null
+  if (state && fs.existsSync(state)) {
+    const pause = new Int32Array(new SharedArrayBuffer(4))
+    const t0 = Date.now()
+    let s = ''
+    for (;;) {
+      try {
+        s = fs.readFileSync(state, 'utf8')
+      } catch {
+        break
+      }
+      if (!s.startsWith('running')) break
+      if (Date.now() - t0 > 120000) {
+        try {
+          process.kill(-Number(s.split(' ')[1]), 'SIGKILL')
+        } catch {}
+        console.error('quod: the background restore took over 2 minutes; restoring here')
+        break
+      }
+      Atomics.wait(pause, 0, 0, 200)
+    }
+  }
   const q =
     cfg.mode === 'shadow'
       ? ['vitest', '--dir', dir, ...cloud, '--audits', '4', '--expect-report', report, '--', 'run', ...args]
