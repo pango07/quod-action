@@ -40,10 +40,20 @@ command. The summary, the JSON/JUnit reports and the exit code are what a full
 3. **Push.** The first run runs every test file, at plain vitest speed, and its
    shadow records them. From the next commit on, only what changed runs.
 
-**Quod Cloud (optional):** give both jobs `permissions: { id-token: write,
-contents: read }`. The ledger then lives on Quod Cloud, which finds the nearest
-recorded ancestor commit, and the Actions cache stays the fallback. Without that
-permission, the Actions cache alone carries the ledger.
+**Quod Cloud:** let the workflow ask GitHub for an OIDC token. Put this at the
+top of the workflow file, or in both jobs:
+
+```yaml
+permissions:
+  contents: read
+  id-token: write
+```
+
+The ledger then lives on Quod Cloud, which finds the nearest recorded ancestor
+commit and shows each run on the dashboard. The Actions cache stays the
+fallback. Without the permission, or when the server doesn't answer, the
+Actions cache alone carries the ledger. Your repository must be in a Quod team,
+with the Quod GitHub App installed on it.
 
 **Turning it off:** set `QUOD_DISABLE: 1` in the job's or the workflow's `env`
 for plain vitest, or remove the line and the job.
