@@ -74,7 +74,7 @@ for plain vitest, or remove the line and the job.
   - puts a `node` shim first on `PATH`, which preloads a small hook into each
     node process.
   - turns every one-shot `vitest run` started in the job (through npm scripts,
-    npx, turbo, pnpm or `node_modules/.bin`) into `quod vitest --no-record` with
+    npx, turbo, pnpm, yarn classic or berry, bun or `node_modules/.bin`) into `quod vitest --no-record` with
     the same arguments. Unchanged files replay; the rest run as plain vitest
     without instrumentation. The ledger is only read.
   - uploads each run's per-test results as an artifact in a post step.
@@ -88,6 +88,7 @@ for plain vitest, or remove the line and the job.
   - watch mode, `--coverage`, `-u`, `--ui`, `--browser`, `--shard`,
     `--changed`
   - anything outside Linux x64
+  - vitest before 3.2, and yarn Plug'n'Play (one line in the log says so)
   - any failure to install quod
 - **Always runs:** a test that failed, spawned a process, used the network or
   wrote into the repository.
@@ -95,5 +96,5 @@ for plain vitest, or remove the line and the job.
   input that can make a test report "pass" without running, so only code from
   your own repository writes one.
 
-Requirements: vitest 4.x, Node 22.15+ (`module.registerHooks`), a Linux x64
+Requirements: vitest 3.2 or later, Node 22.15+ (`module.registerHooks`), a Linux x64
 runner.

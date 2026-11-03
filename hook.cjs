@@ -17,6 +17,7 @@
   if (env.QUOD_SHIM_ACTIVE === '1' || env.QUOD_DISABLE === '1') return
   const bin = argv[1]
   if (bin && /npm(-cli\.js)?$/.test(bin)) return npmCi(bin, argv.slice(2))
+  if (bin && /yarn/.test(bin)) return yarnNode(bin)
   if (!bin || !/vitest(\.m?js)?$/.test(bin)) return
   const fs = require('node:fs')
   const path = require('node:path')
@@ -27,7 +28,6 @@
     return
   }
   if (!entry.endsWith(`${path.sep}node_modules${path.sep}vitest${path.sep}vitest.mjs`)) return
-
   // One-shot runs only: `vitest run ...`, or `vitest ...` where vitest runs
   // once (CI). Watch mode, other commands and what quod cannot replay
   // (coverage reports, snapshot updates, the UI, browser mode, shards,
@@ -45,6 +45,29 @@
     return
   }
   if (!fs.existsSync(cfg.quod)) return
+
+  // What quod cannot record runs as plain vitest, untouched (no quod process
+  // at all): yarn Plug'n'Play (vitest and the dependencies in zip archives),
+  // and vitest before 3.2 (what quod's recorder and replay use). The shadow
+  // job runs vitest only to record, so there it does not run at all.
+  let version = ''
+  try {
+    version = JSON.parse(fs.readFileSync(path.join(path.dirname(entry), 'package.json'), 'utf8')).version ?? ''
+  } catch {}
+  const [major, minor] = version.split('.').map(Number)
+  const no = process.versions.pnp
+    ? "yarn Plug'n'Play is not supported yet"
+    : !(major > 3 || (major === 3 && minor >= 2))
+      ? `vitest ${version || '(unknown version)'} is not supported (3.2 or later)`
+      : ''
+  if (no) {
+    if (cfg.mode === 'shadow') {
+      console.error(`quod: ${no}; nothing to record, so the shadow skips this vitest run`)
+      process.exit(0)
+    }
+    console.error(`quod: ${no}; running plain vitest`)
+    return
+  }
 
   // One ledger per package and command line: where it runs (from the
   // repository root) and its arguments.
@@ -111,6 +134,34 @@
   if (cfg.mode === 'shadow') process.exit(0)
   process.exit(r.status ?? 1)
 })()
+
+// Yarn (classic and berry, directly, through corepack, or a yarnPath
+// release) runs package scripts and bins with a `node` of its own first on
+// PATH: a wrapper in a temporary directory (/tmp/yarn--*, /tmp/xfs-*) that
+// runs yarn's own process.execPath, the real node, which is the shim's
+// target, not the shim. So the hook would never load under `yarn test`. In
+// yarn's process (the shim started it), process.execPath becomes the shim,
+// which yarn's wrappers then run: the real node with this file preloaded,
+// exactly as everywhere else. Nothing else in yarn changes; a node it
+// forks or spawns by execPath gets the shim, which is node.
+function yarnNode(bin) {
+  const fs = require('node:fs')
+  const path = require('node:path')
+  let entry
+  try {
+    entry = fs.realpathSync(bin)
+  } catch {
+    return
+  }
+  // yarn classic's bin/yarn.js, corepack's yarn.js and yarnpkg.js, berry's
+  // .yarn/releases/yarn-<version>.cjs and its corepack copy (yarn.js).
+  if (!/^yarn(pkg)?(-[^/]*)?\.c?js$/.test(path.basename(entry))) return
+  const shim = path.join(__dirname, 'bin', 'node')
+  try {
+    fs.accessSync(shim, fs.constants.X_OK)
+    process.execPath = shim
+  } catch {}
+}
 
 // `npm ci` in the project Quod restored node_modules for (deps.cjs). npm ci
 // deletes node_modules and installs the lockfile; when the tree on disk is
