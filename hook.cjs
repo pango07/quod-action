@@ -93,10 +93,13 @@
       Atomics.wait(pause, 0, 0, 200)
     }
   }
+  // check (records inline unless read only), or the older shadow.
   const q =
     cfg.mode === 'shadow'
       ? ['vitest', '--dir', dir, ...cloud, '--audits', '4', '--expect-report', report, '--', 'run', ...args]
-      : ['vitest', '--no-record', '--dir', dir, ...cloud, '--report', report, '--', 'run', ...args]
+      : cfg.record
+        ? ['vitest', '--dir', dir, ...cloud, '--report', report, '--', 'run', ...args]
+        : ['vitest', '--no-record', '--dir', dir, ...cloud, '--report', report, '--', 'run', ...args]
   const r = require('node:child_process').spawnSync(cfg.quod, q, {
     stdio: 'inherit',
     env: { ...env, ...(cfg.cloud ?? {}), QUOD_SHIM_ACTIVE: '1' },

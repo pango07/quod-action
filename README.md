@@ -36,54 +36,36 @@ Pin the action and the workflow to the commit of the release, `0d639e9a85fde5f27
          - run: npx turbo run test          # unchanged: vitest goes through Quod
    ```
 
-3. **One job in the same workflow file: the shadow.** It records after your test
-   job finishes, and it is never your check. Use your test job's id and your test
-   command:
-
-   ```yaml
-     quod-shadow:
-       needs: check
-       permissions:
-         contents: read
-         id-token: write
-       uses: pango07/quod-action/.github/workflows/shadow.yml@0d639e9a85fde5f27f06d44811332a6f0fb6fe1e # v1
-       with: { test: npx turbo run test }
-   ```
-
-   Other inputs:
-   - `install` (default `npm ci`)
-   - `node-version` (default `24`)
-   - `cache` (setup-node's cache; default `npm`)
-   - `fetch-depth` (default `0`)
-   - `working-directory`
-
-   The reports and the Actions cache go through the runner's own token, so no
-   `actions:` permission is needed.
-
-The first run runs every test file, at plain vitest speed, and its shadow
-records them. From the next commit on, only what changed runs.
+That's all: no second job. The first run runs every test file, at about
+plain vitest speed, and records them. A recorded file replays once a second
+run of the same inputs agreed with it (the second witness), so from the
+second commit on only what changed runs.
 
 **Turning it off:** set `QUOD_DISABLE: 1` in the job's or the workflow's `env`
-for plain vitest, or remove the line and the job.
+for plain vitest, or remove the line.
+
+**Had the shadow job?** It still works, and you can delete it: the test job
+records now. To keep it as your only recorder, give the action
+`with: { record: false }`.
 
 ## What happens
 
 - **Your test job (`mode: check`):**
-  - installs quod and restores the newest recording. It tries your branch first,
-    then the pull request's base, then the default branch.
+  - installs quod and restores the newest ledger: from Quod Cloud (nearest
+    recorded ancestor commit), else the Actions cache (your branch, then the
+    pull request's base, then the default branch).
   - puts a `node` shim first on `PATH`, which preloads a small hook into each
     node process.
   - turns every one-shot `vitest run` started in the job (through npm scripts,
-    npx, turbo, pnpm or `node_modules/.bin`) into `quod vitest --no-record` with
-    the same arguments. Unchanged files replay; the rest run as plain vitest
-    without instrumentation. The ledger is only read.
-  - uploads each run's per-test results as an artifact in a post step.
-- **The shadow (`mode: shadow`):**
-  - runs the same command with recording.
-  - records a file only if its tests did exactly what they did in your job, so
-    recording can never change a result.
-  - audits a few replayed files and saves the ledger for this commit.
-  - its exit code is diagnostics only.
+    npx, turbo, pnpm or `node_modules/.bin`) into `quod vitest` with the same
+    arguments. Files whose inputs are unchanged since a run that a second run
+    confirmed replay; the rest run and are recorded as they run.
+  - saves the ledger: to Quod Cloud from quod itself, and to the Actions cache
+    in a post step.
+- **The second witness:** a recording is provisional until another run of the
+  same inputs (the same file contents, packages, environment, vitest
+  arguments) produced the same per-test results; only then does it replay. A
+  run that disagrees quarantines the file until it re-proves itself.
 - **Stays plain vitest:**
   - watch mode, `--coverage`, `-u`, `--ui`, `--browser`, `--shard`,
     `--changed`
@@ -91,7 +73,7 @@ for plain vitest, or remove the line and the job.
   - any failure to install quod
 - **Always runs:** a test that failed, spawned a process, used the network or
   wrote into the repository.
-- **Trust:** the shadow never records a fork's pull request. A ledger is an
+- **Trust:** a fork's pull request only reads the ledger, never records. A ledger is an
   input that can make a test report "pass" without running, so only code from
   your own repository writes one.
 

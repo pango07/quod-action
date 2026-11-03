@@ -2,8 +2,8 @@ name: Quod
 description: >
   Replays the vitest test files whose inputs did not change and runs the rest,
   inside your existing test command (vitest, npm test, npx turbo run test).
-  One line in your CI job, after setup-node; recording happens in a separate,
-  non-blocking workflow (mode: shadow).
+  One line in your CI job, after setup-node. The job records as it runs; a
+  recorded file replays once a second run of the same inputs agreed with it.
 author: pango07
 branding:
   icon: fast-forward
@@ -11,17 +11,23 @@ branding:
 inputs:
   mode:
     description: >
-      check (default): your CI job. Every `vitest run` replays what the last
-      recording proves unchanged and runs the rest; the ledger is only read.
-      shadow: the recording job (pango07/quod-action/.github/workflows/shadow.yml,
-      after your CI job in the same workflow); runs the same command with
-      recording, audits, and saves the ledger.
+      check (default): your CI job. Every `vitest run` replays what the
+      ledger proves unchanged (seen twice: the second witness) and runs and
+      records the rest, then saves the ledger (Quod Cloud, else the Actions
+      cache). shadow: the older separate recording job
+      (.github/workflows/shadow.yml); still works, no longer needed.
     required: false
     default: check
+  record:
+    description: >
+      check mode: record in this job (true, the default). false: only read the
+      ledger, as before, for a setup that keeps the shadow job.
+    required: false
+    default: 'true'
   version:
     description: The quod release (a bin-<sha> release of pango07/ci-bench)
     required: false
-    default: bin-d40c669
+    default: bin-c8a44d5
   sha256:
     description: SHA-256 of that release's quod-linux-x86_64.tar.gz (required when version is set)
     required: false
