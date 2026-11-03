@@ -152251,7 +152251,7 @@ const fs = __nccwpck_require__(73024)
 const path = __nccwpck_require__(76760)
 const crypto = __nccwpck_require__(77598)
 
-const VERSION = 'quod-deps-v1'
+const VERSION = 'quod-deps-v2'
 
 // Lifecycle scripts `npm ci` runs for the project's own packages.
 const LIFECYCLE = ['preinstall', 'install', 'postinstall', 'prepublish', 'preprepare', 'prepare', 'postprepare', 'dependencies']
@@ -152267,6 +152267,13 @@ const CONTAINED = new Set([
   'sqlite3', 'bcrypt', 'argon2', 're2', 'farmhash', 'zeromq', 'grpc', '@grpc/grpc-js', 'oxc-resolver',
   '@rolldown/binding', 'rolldown', 'dprint', '@dprint/formatter',
 ])
+
+// Of those, the ones that only fetch or check a prebuilt binary (or print):
+// what they leave does not depend on the runner image's compilers and
+// libraries, only on the platform. Any other install script may compile,
+// so the image's exact version goes into the key.
+const PREBUILT = new Set(['esbuild', 'core-js', 'core-js-pure', 'fsevents', 'unrs-resolver', 'workerd', 'es5-ext', 'protobufjs', '@biomejs/biome', 'nodemon', 'styled-components', '@sentry/cli', '@swc/core', 'oxc-resolver', '@rolldown/binding', 'rolldown', 'dprint'])
+const PLATFORM_BINARY = /^@esbuild\/|^@img\/|^@swc\/core-|^@rollup\/rollup-|^@parcel\/watcher-|^@biomejs\/cli-|^@next\/swc-/
 
 const read = (p) => {
   try {
@@ -152382,9 +152389,23 @@ function key(root, info, facts, env = process.env) {
   if (info.pm === 'npm') add('npm', facts.npm)
   add('platform', process.platform)
   add('arch', process.arch)
-  for (const k of ['ImageOS', 'ImageVersion', 'NODE_ENV']) add(k, env[k] ?? '')
+  add('ImageOS', env.ImageOS ?? '')
+  if (info.pm === 'npm' && compiles(root, info)) add('ImageVersion', env.ImageVersion ?? '')
+  add('NODE_ENV', env.NODE_ENV ?? '')
   for (const k of Object.keys(env).filter((k) => /^npm_config_/i.test(k)).sort()) add(`env ${k.toLowerCase()}`, env[k])
   return h.digest('hex').slice(0, 40)
+}
+
+// Whether any dependency's install script may compile against the image.
+function compiles(root, info) {
+  const lock = json(path.join(root, info.lock))
+  if (!lock?.packages) return true
+  for (const [p, v] of Object.entries(lock.packages)) {
+    if (!v.hasInstallScript || !p.includes('node_modules/')) continue
+    const name = p.slice(p.lastIndexOf('node_modules/') + 'node_modules/'.length)
+    if (!PREBUILT.has(name) && !PLATFORM_BINARY.test(name)) return true
+  }
+  return false
 }
 
 // npm: the node_modules directories to keep (relative to the workspace),
@@ -152409,7 +152430,7 @@ function npmUnsafe(root) {
   for (const [p, v] of Object.entries(lock.packages)) {
     if (!v.hasInstallScript || !p.includes('node_modules/')) continue
     const name = p.slice(p.lastIndexOf('node_modules/') + 'node_modules/'.length)
-    if (!CONTAINED.has(name) && !/^@esbuild\/|^@img\/|^@swc\/core-|^@rollup\/rollup-|^@parcel\/watcher-|^@biomejs\/cli-|^@next\/swc-/.test(name))
+    if (!CONTAINED.has(name) && !PLATFORM_BINARY.test(name))
       return `${name} has an install script Quod does not know to stay in its own directory`
   }
   return null
