@@ -29,12 +29,14 @@
 
   // One-shot runs only: `vitest run ...`, or `vitest ...` where vitest runs
   // once (CI). Watch mode, other commands and what quod cannot replay
-  // (coverage reports, snapshot updates, the UI, browser mode, shards,
-  // changed-file filters) stay plain vitest.
+  // (snapshot updates, the UI, browser mode, shards, changed-file filters)
+  // stay plain vitest. Coverage (`--coverage`, or enabled in the config)
+  // goes through quod: a replayed file's recorded coverage joins the report
+  // (quod runs every file itself when it cannot carry the provider).
   let args = argv.slice(2)
   if (args[0] === 'run') args = args.slice(1)
   else if (!env.CI || ['watch', 'dev', 'related', 'bench', 'typecheck', 'list', 'init'].includes(args[0])) return
-  const plain = /^(-w|--watch|--ui|--browser|-u|--update|--coverage|--merge-reports|--shard|--changed|--standalone|--inspect|--inspect-brk|--typecheck)(\.|=|$)/
+  const plain = /^(-w|--watch|--ui|--browser|-u|--update|--merge-reports|--shard|--changed|--standalone|--inspect|--inspect-brk|--typecheck)(\.|=|$)/
   if (args.some((a) => plain.test(a))) return
 
   let cfg

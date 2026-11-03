@@ -85,10 +85,15 @@ for plain vitest, or remove the line and the job.
   - audits a few replayed files and saves the ledger for this commit.
   - its exit code is diagnostics only.
 - **Stays plain vitest:**
-  - watch mode, `--coverage`, `-u`, `--ui`, `--browser`, `--shard`,
-    `--changed`
+  - watch mode, `-u`, `--ui`, `--browser`, `--shard`, `--changed`
+  - coverage with a provider other than v8 or istanbul, or with
+    `thresholds.autoUpdate` (quod runs every file then)
   - anything outside Linux x64
   - any failure to install quod
+- **Coverage (`--coverage`, or `coverage.enabled` in the config):** each
+  recorded file keeps its coverage; a replayed file's joins the files that
+  ran, and vitest's own provider writes every report and checks the
+  thresholds, as in a full run.
 - **Always runs:** a test that failed, spawned a process, used the network or
   wrote into the repository.
 - **Trust:** the shadow never records a fork's pull request. A ledger is an
