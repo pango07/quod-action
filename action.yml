@@ -1,10 +1,12 @@
 name: Quod
 description: >
-  Makes your Node CI job faster without changing it: restores your
-  dependencies before your install step (npm ci finds node_modules in place),
-  points turbo's and Nx's remote cache at Quod Cloud, and replays the vitest
-  test files whose inputs did not change. One line in your CI job, after
-  setup-node; recording happens in a separate, non-blocking job (mode: shadow).
+  Makes your Node CI job faster without changing it: one line after
+  setup-node. Restores your dependencies before your install step (npm ci
+  finds node_modules in place), points turbo's and Nx's remote cache at Quod
+  Cloud, and replays the vitest test files whose inputs did not change. The
+  job records as it runs: a record replays once a second run agrees with it,
+  and files that fail only while recording run again plain, so Quod never
+  turns a green job red. No second job.
 author: pango07
 branding:
   icon: fast-forward

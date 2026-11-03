@@ -1,81 +1,161 @@
 # Quod for vitest
 
-Quod replays the vitest test files whose inputs did not change since they last
-passed. It runs only the files your change can reach, inside your existing test
-command. The summary, the JSON/JUnit reports and the exit code are what a full
-`vitest run` gives.
+Quod makes a Node CI job faster with one line after `actions/setup-node`.
+Your install and test commands stay exactly as they are.
 
-## Add Quod to your CI
+- **Tests:** Quod replays the vitest test files whose inputs did not change
+  since they last passed, and runs the rest, inside your existing test
+  command. The summary, the JSON/JUnit reports and the exit code are what a
+  full `vitest run` gives.
+- **Dependencies:** Quod restores what your install puts down before your
+  install step runs. For npm that is `node_modules` itself, so `npm ci`
+  finds it in place. For pnpm, yarn and bun it is the package store.
+- **turbo and Nx:** when you have no remote cache of your own, Quod points
+  turbo's and Nx's remote cache at Quod Cloud.
 
-Pin the action and the workflow to the commit of the release, `0d639e9a85fde5f27f06d44811332a6f0fb6fe1e` (the
-`v1` tag; `@v1` works too if your policy allows tags).
+The job records as it runs. There is no second job.
 
-1. **Permissions.** Quod Cloud keeps the ledger. It knows your job by its
-   GitHub OIDC token. Give the test job:
+## Quickstart
 
-   ```yaml
-     check:
-       permissions:
-         contents: read
-         id-token: write
-   ```
+Give the test job an OIDC token, and add one line right after
+`actions/setup-node`:
 
-   Without `id-token: write`, or when the server doesn't answer, the Actions
-   cache carries the ledger instead. Your repository must be in a Quod team,
-   with the Quod GitHub App installed on it.
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write          # Quod Cloud knows your job by its OIDC token
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pango07/quod-action@<sha> # v2   ← this line
+      - run: npm ci
+      - run: npm test                    # unchanged: vitest goes through Quod
+```
 
-2. **One line in your test job,** right after `actions/setup-node`. Your install
-   and test commands stay as they are:
+**Pin the full commit SHA, with `# v2` as a comment**, as GitHub recommends for
+third-party actions. Replace `<sha>` with the commit the `v2` tag points to:
 
-   ```yaml
-         - uses: actions/setup-node@v4
-           with:
-             node-version: 24
-         - uses: pango07/quod-action@0d639e9a85fde5f27f06d44811332a6f0fb6fe1e # v1   ← this line
-         - run: npm ci
-         - run: npx turbo run test          # unchanged: vitest goes through Quod
-   ```
+```sh
+git ls-remote https://github.com/pango07/quod-action refs/tags/v2
+```
 
-That's all: no second job. The first run runs every test file, at about
-plain vitest speed, and records them. A recorded file replays once a second
-run of the same inputs agreed with it (the second witness), so from the
-second commit on only what changed runs.
+The [v2 release](https://github.com/pango07/quod-action/releases/tag/v2) and
+the [quickstart](https://www.quodci.com/docs/quickstart) show it too.
+Dependabot and Renovate keep a SHA pin with a version comment up to date.
+`@v2` also works if your policy allows tags.
 
-**Turning it off:** set `QUOD_DISABLE: 1` in the job's or the workflow's `env`
-for plain vitest, or remove the line.
+Your repository must be in a Quod team, with the Quod GitHub App installed on
+it. Without `id-token: write`, or when Quod Cloud doesn't answer, the
+GitHub Actions cache carries the ledger. The turbo/Nx remote cache stays off.
 
-**Had the shadow job?** It still works, and you can delete it: the test job
-records now. To keep it as your only recorder, give the action
-`with: { record: false }`.
+Requirements for test replay: vitest 4.x, Node 22.15 or later
+(`module.registerHooks`), and a Linux x64 runner. The dependency cache and
+the task cache also run on macOS runners.
 
 ## What happens
 
-- **Your test job (`mode: check`):**
-  - installs quod and restores the newest ledger: from Quod Cloud (nearest
-    recorded ancestor commit), else the Actions cache (your branch, then the
-    pull request's base, then the default branch).
-  - puts a `node` shim first on `PATH`, which preloads a small hook into each
-    node process.
-  - turns every one-shot `vitest run` started in the job (through npm scripts,
-    npx, turbo, pnpm or `node_modules/.bin`) into `quod vitest` with the same
-    arguments. Files whose inputs are unchanged since a run that a second run
-    confirmed replay; the rest run and are recorded as they run.
-  - saves the ledger: to Quod Cloud from quod itself, and to the Actions cache
-    in a post step.
-- **The second witness:** a recording is provisional until another run of the
-  same inputs (the same file contents, packages, environment, vitest
-  arguments) produced the same per-test results; only then does it replay. A
-  run that disagrees quarantines the file until it re-proves itself.
-- **Stays plain vitest:**
-  - watch mode, `--coverage`, `-u`, `--ui`, `--browser`, `--shard`,
-    `--changed`
-  - anything outside Linux x64
-  - any failure to install quod
-- **Always runs:** a test that failed, spawned a process, used the network or
-  wrote into the repository.
-- **Trust:** a fork's pull request only reads the ledger, never records. A ledger is an
-  input that can make a test report "pass" without running, so only code from
+- **The first run** runs every test file, at about plain vitest speed, and
+  records each one.
+- **A record replays only after a second run agrees with it** (the second
+  witness). A record is provisional until another run of the same inputs
+  produces the same per-test results: the same file contents, packages,
+  environment and vitest arguments. A run that disagrees quarantines the
+  file until it proves itself again. So a file runs twice after it changes:
+  on the commit that changed it, and once more on the next run.
+- **Quod never turns a green job red.** Recording instruments the tests,
+  which can slow a timing-sensitive test into a failure. When a file fails
+  while recording, Quod runs the failed files again without recording, and
+  that run's result, output and exit code are the job's. A file that failed
+  is never recorded.
+- **Always runs:** a test file that failed, started a child process, used
+  the network, or wrote into the repository.
+- **Stays plain vitest:** watch mode, `--coverage`, `-u`, `--ui`,
+  `--browser`, `--shard`, `--changed`; anything outside Linux x64; any
+  failure to set up Quod.
+- **Trust:** a fork's pull request only reads the ledger and never records.
+  A ledger can make a test report "pass" without running, so only code from
   your own repository writes one.
 
-Requirements: vitest 4.x, Node 22.15+ (`module.registerHooks`), a Linux x64
-runner.
+In more detail, the action:
+
+1. **Dependencies.** Restores what your install puts down, keyed on the
+   lockfile, every `package.json`, the package manager's config, Node, the
+   OS, the architecture and the runner image. For npm, `npm ci` then finds
+   `node_modules` in place and returns at once. For pnpm, yarn and bun, the
+   install runs as always and checks the store itself. If another step
+   already restored `node_modules` or the store, Quod leaves it alone. After
+   the job, it saves what the install produced, but only from jobs on your
+   own code (push, same-repository pull request, merge queue, dispatch,
+   schedule).
+2. **Task cache.** If the repository has a `turbo.json` or `nx.json`, the
+   job has `id-token: write`, and none of `TURBO_API`, `TURBO_TOKEN`,
+   `TURBO_TEAM`, `TURBO_TEAMID`, `NX_SELF_HOSTED_REMOTE_CACHE_SERVER`,
+   `NX_CLOUD_ACCESS_TOKEN` or `NX_NO_CLOUD` is set, turbo's (and Nx's)
+   remote cache becomes Quod Cloud for this job. A pull request writes only
+   its own branch's entries, so it never puts a task result in front of
+   `main`.
+3. **Tests.** Installs quod and restores the newest ledger: from Quod Cloud
+   (the nearest recorded ancestor commit), else the Actions cache (your
+   branch, then the pull request's base, then the default branch). It puts a
+   `node` shim first on `PATH`, and every one-shot `vitest run` in the job
+   (through npm scripts, npx, turbo, pnpm or `node_modules/.bin`) becomes
+   `quod vitest` with the same arguments. After the job, it saves the
+   ledger: to Quod Cloud from quod itself, and to the Actions cache in a
+   post step.
+
+Each part fails open: if it can't set up, the job runs as it would without
+Quod.
+
+## Upgrading from v1
+
+Replace the action line's SHA and comment with v2's. Then:
+
+- **Delete the `quod-shadow` job.** The test job records now. The shadow
+  workflow still works, so nothing breaks if you leave it for a while.
+- **Expect the first run or two to run every file.** v2 installs a newer
+  quod, and records are tied to the quod that made them. The first run
+  after upgrading records every file. The next run is the second witness
+  for those records, so it runs them again. From then on, unchanged files
+  replay.
+- **Remove your own dependency and turbo cache steps if you like.** They
+  keep working: Quod leaves a `node_modules` or store another step restored
+  alone, and doesn't touch a remote cache you configured.
+
+To keep the shadow job as your only recorder, give the action
+`with: { record: false }`. The test job then only reads the ledger, as in
+v1.
+
+## Turning things off
+
+| To turn off | Set |
+| --- | --- |
+| Quod entirely, for a job or a workflow | `QUOD_DISABLE: 1` in its `env` (or remove the line) |
+| Recording in the test job (keep the shadow job) | `with: { record: false }` |
+| The dependency cache | `with: { dependencies: false }` |
+| The turbo/Nx remote cache | `with: { task-cache: false }` |
+| Quod Cloud for the ledger (Actions cache only) | `with: { cloud: false }` |
+
+## Inputs
+
+All inputs are optional.
+
+| Input | Default | What it does |
+| --- | --- | --- |
+| `mode` | `check` | `check`: your test job. It replays what the ledger proves unchanged, then runs and records the rest. `shadow`: the older separate recording job, used inside `.github/workflows/shadow.yml`. It still works, and isn't needed any more. |
+| `record` | `true` | In `check` mode, record in this job. `false` only reads the ledger, for a setup that keeps the shadow job. |
+| `version` | `bin-c6f6ed3` | The quod release to install (a `bin-<sha>` release of pango07/ci-bench). |
+| `sha256` | the pinned checksum | SHA-256 of that release's `quod-linux-x86_64.tar.gz`. Required when `version` is a release the action doesn't know. |
+| `cloud` | `true` | Keep the ledger in Quod Cloud when this quod supports it and the job has `id-token: write`. `false` keeps it in the Actions cache. |
+| `dependencies` | `true` | Restore and save what your install puts down: `node_modules` for npm, the store for pnpm, yarn and bun. `false` leaves your install alone. |
+| `task-cache` | `true` | Point turbo's and Nx's remote cache at Quod Cloud, when the job has `id-token: write` and you have no remote cache configured. `false` leaves them alone. |
+| `server` | `https://api.quodci.com` | The Quod Cloud server. |
+| `server-key` | Quod Cloud's key | The server's Ed25519 public key. Every answer from the server is signed with it. |
+| `job-id` | `${{ job.check_run_id }}` | This job's check run, for Quod Cloud's reports. |
+| `token` | `${{ github.token }}` | Reads a triggering CI run's report artifact (a `workflow_run` shadow). |
+
+More: [quodci.com/docs](https://www.quodci.com/docs).
