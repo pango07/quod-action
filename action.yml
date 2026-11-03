@@ -21,7 +21,7 @@ inputs:
   version:
     description: The quod release (a bin-<sha> release of pango07/ci-bench)
     required: false
-    default: bin-d03fb70
+    default: bin-1dd00b0
   sha256:
     description: SHA-256 of that release's quod-linux-x86_64.tar.gz (required when version is set)
     required: false

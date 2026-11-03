@@ -7,26 +7,46 @@ command. The summary, the JSON/JUnit reports and the exit code are what a full
 
 ## Add Quod to your CI
 
-1. **One line in your test job,** right after `actions/setup-node`. Your install
+Pin the action and the workflow to the commit of the release, `V1SHA` (the
+`v1` tag; `@v1` works too if your policy allows tags).
+
+1. **Permissions.** Quod Cloud keeps the ledger. It knows your job by its
+   GitHub OIDC token. Give the test job:
+
+   ```yaml
+     check:
+       permissions:
+         contents: read
+         id-token: write
+   ```
+
+   Without `id-token: write`, or when the server doesn't answer, the Actions
+   cache carries the ledger instead. Your repository must be in a Quod team,
+   with the Quod GitHub App installed on it.
+
+2. **One line in your test job,** right after `actions/setup-node`. Your install
    and test commands stay as they are:
 
    ```yaml
          - uses: actions/setup-node@v4
            with:
              node-version: 24
-         - uses: pango07/quod-action@v1     # ← this line
+         - uses: pango07/quod-action@V1SHA # v1   ← this line
          - run: npm ci
          - run: npx turbo run test          # unchanged: vitest goes through Quod
    ```
 
-2. **One job in the same workflow file: the shadow.** It records after your test
+3. **One job in the same workflow file: the shadow.** It records after your test
    job finishes, and it is never your check. Use your test job's id and your test
    command:
 
    ```yaml
      quod-shadow:
        needs: check
-       uses: pango07/quod-action/.github/workflows/shadow.yml@v1
+       permissions:
+         contents: read
+         id-token: write
+       uses: pango07/quod-action/.github/workflows/shadow.yml@V1SHA # v1
        with: { test: npx turbo run test }
    ```
 
@@ -37,23 +57,11 @@ command. The summary, the JSON/JUnit reports and the exit code are what a full
    - `fetch-depth` (default `0`)
    - `working-directory`
 
-3. **Push.** The first run runs every test file, at plain vitest speed, and its
-   shadow records them. From the next commit on, only what changed runs.
+   The reports and the Actions cache go through the runner's own token, so no
+   `actions:` permission is needed.
 
-**Quod Cloud:** let the workflow ask GitHub for an OIDC token. Put this at the
-top of the workflow file, or in both jobs:
-
-```yaml
-permissions:
-  contents: read
-  id-token: write
-```
-
-The ledger then lives on Quod Cloud, which finds the nearest recorded ancestor
-commit and shows each run on the dashboard. The Actions cache stays the
-fallback. Without the permission, or when the server doesn't answer, the
-Actions cache alone carries the ledger. Your repository must be in a Quod team,
-with the Quod GitHub App installed on it.
+The first run runs every test file, at plain vitest speed, and its shadow
+records them. From the next commit on, only what changed runs.
 
 **Turning it off:** set `QUOD_DISABLE: 1` in the job's or the workflow's `env`
 for plain vitest, or remove the line and the job.

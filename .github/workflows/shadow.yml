@@ -2,8 +2,14 @@
 #
 #   quod-shadow:
 #     needs: check                      # your test job
-#     uses: pango07/quod-action/.github/workflows/shadow.yml@v1
+#     permissions:
+#       contents: read                  # checkout
+#       id-token: write                 # Quod Cloud (GitHub OIDC)
+#     uses: pango07/quod-action/.github/workflows/shadow.yml@<commit sha> # v1
 #     with: { test: npx turbo run test }
+#
+# The reports and the Actions cache go through the runner's own token, so no
+# `actions:` permission is needed.
 #
 # It runs after your test job, from the same commit and with the same setup:
 # checkout, setup-node, the install, your test command with recording. Each
@@ -41,6 +47,9 @@ jobs:
   record:
     if: ${{ !cancelled() && github.event.pull_request.head.repo.fork != true }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     continue-on-error: true
     timeout-minutes: 30
     steps:
