@@ -22,6 +22,7 @@ const PINS = {
   'bin-d03fb70': '3208a79fda5e4d66a3225428fd215b4a8d0726e376da13c7d019a358d9b50840',
   'bin-1dd00b0': '12c1abb1ef7ab11ec333a7e9cb0ced784b124549bc8c296ef1fa17bf2e74ebcd',
   'bin-d242bd2': '8cb00dea7c3b0b9f369cdfe15579c6cd61a917ee0e471460153111fac6cce394',
+  'bin-48fec94': 'c22bffd824687790e12dc157249a080850dd9608c54b489be6ed67c7443dbd4d',
 }
 
 async function install(version, want) {
@@ -120,7 +121,17 @@ async function run() {
       } catch {}
       if (!up) core.warning(`Quod: ${server} did not answer; ledger hand-off through the Actions cache`)
       else {
-        cloud = { QUOD_SERVER: server, QUOD_SERVER_KEY: core.getInput('server-key'), QUOD_JOB_ID: core.getInput('job-id') }
+        // GitHub's OIDC request variables go to quod through the config file
+        // (0600, in the runner's temp): task runners filter them from their
+        // tasks (turbo's strict env mode drops ACTIONS_*), and quod needs
+        // them to restore, report and save.
+        cloud = {
+          QUOD_SERVER: server,
+          QUOD_SERVER_KEY: core.getInput('server-key'),
+          QUOD_JOB_ID: core.getInput('job-id'),
+          ACTIONS_ID_TOKEN_REQUEST_URL: process.env.ACTIONS_ID_TOKEN_REQUEST_URL,
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN,
+        }
         core.info(`Quod: ledger hand-off through Quod Cloud (${server}); the Actions cache is the fallback`)
       }
     }
@@ -154,6 +165,7 @@ async function run() {
   fs.writeFileSync(
     paths.config,
     JSON.stringify({ quod, mode, ledgers: paths.ledgers, reports: paths.reports, root: process.env.GITHUB_WORKSPACE, cloud, prefetch }),
+    { mode: 0o600 },
   )
   const bin = path.join(paths.base, 'bin')
   fs.mkdirSync(bin, { recursive: true })
