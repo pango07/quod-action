@@ -15,6 +15,7 @@ const { paths, scope, keys } = require('./common')
 const PINS = {
   'bin-cd358c8': 'f7bd0b7b33437582a2fd6d592ea286c6aae6a66195a13310223dc51e037c5d19',
   'bin-a084b71': 'c0ff034eecf8154af122440e9ff48f1ffcdeddbb0a2f495ce5ef71af20129519',
+  'bin-c63b245': '2824e80e11aa530f098318d791a5134ff7c32f9ce99005fadbb6641f643148cd',
 }
 
 async function install(version, want) {
