@@ -1,0 +1,37 @@
+# The action on a small vitest project, the way a customer uses it: one
+# line, then the project's own test commands (an npm script, npx, the .bin
+# shim). quod-shadow.yml records after this run; the next run replays.
+name: test
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build the action (dist/)
+        run: npm install --no-audit --no-fund && npm run build
+      - uses: ./
+      - run: npm install --no-audit --no-fund
+        working-directory: test
+      - run: npm test
+        working-directory: test
+      - run: npx vitest run tests/add.test.js
+        working-directory: test
+      - name: QUOD_DISABLE=1 is plain vitest
+        run: npm test 2>&1 | tee out.txt; ! grep -q 'quod vitest' out.txt
+        working-directory: test
+        env:
+          QUOD_DISABLE: 1
+      - name: A failing test fails the command
+        working-directory: test
+        run: |
+          echo "import { test, expect } from 'vitest'; test('fails', () => expect(1).toBe(2))" > tests/fail.test.js
+          if npx vitest run tests/fail.test.js; then echo "::error::a failing test passed"; exit 1; fi
+          rm tests/fail.test.js

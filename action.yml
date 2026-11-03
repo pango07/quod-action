@@ -1,0 +1,35 @@
+name: Quod
+description: >
+  Replays the vitest test files whose inputs did not change and runs the rest,
+  inside your existing test command (vitest, npm test, npx turbo run test).
+  One line in your CI job, after setup-node; recording happens in a separate,
+  non-blocking workflow (mode: shadow).
+author: pango07
+branding:
+  icon: fast-forward
+  color: purple
+inputs:
+  mode:
+    description: >
+      check (default): your CI job. Every `vitest run` replays what the last
+      recording proves unchanged and runs the rest; the ledger is only read.
+      shadow: the recording workflow (on workflow_run of your CI); runs the
+      same command with recording, audits, and saves the ledger.
+    required: false
+    default: check
+  version:
+    description: The quod release (a bin-<sha> release of pango07/ci-bench)
+    required: false
+    default: bin-cd358c8
+  sha256:
+    description: SHA-256 of that release's quod-linux-x86_64.tar.gz (required when version is set)
+    required: false
+    default: ''
+  token:
+    description: Reads the CI run's report artifact (mode shadow)
+    required: false
+    default: ${{ github.token }}
+runs:
+  using: node24
+  main: dist/main/index.js
+  post: dist/post/index.js

@@ -1,0 +1,17 @@
+{
+  "name": "quod-action",
+  "private": true,
+  "description": "Quod for vitest in GitHub Actions: one line in your CI job",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "ncc build src/main.js -o dist/main && ncc build src/post.js -o dist/post"
+  },
+  "dependencies": {
+    "@actions/artifact": "^2.3.2",
+    "@actions/cache": "^4.0.3",
+    "@actions/core": "^1.11.1"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.3"
+  }
+}
