@@ -152713,7 +152713,7 @@ var __webpack_exports__ = {};
 "use strict";
 
 // Installs quod, restores the most recent recording (the ledger) and puts
-// the vitest shim (hook.cjs) in NODE_OPTIONS for the rest of the job. Any
+// the vitest shim (hook.cjs, through a node shim on PATH) for the rest of the job. Any
 // failure here leaves the job as it was: plain vitest.
 const core = __nccwpck_require__(37484)
 const cache = __nccwpck_require__(5116)
@@ -152791,13 +152791,29 @@ async function run() {
     for (const a of mine) await client.downloadArtifact(a.id, { path: paths.reports, findBy })
   }
 
-  const require = `--require ${paths.hook}`
+  // The shim: a `node` first on PATH that runs the real one with hook.cjs
+  // preloaded. Whatever starts vitest (npm scripts, npx, turbo, pnpm, a
+  // `#!/usr/bin/env node` bin) finds node on PATH; GitHub refuses
+  // NODE_OPTIONS from an action ($GITHUB_ENV), and turbo filters most
+  // variables from its tasks, but every runner keeps PATH.
+  const node = execFileSync('sh', ['-c', 'command -v node'], { encoding: 'utf8' }).trim()
+  if (!node) throw new Error('no node on PATH: put this step after actions/setup-node')
   fs.copyFileSync(path.join(__dirname, '..', '..', 'hook.cjs'), paths.hook)
   fs.writeFileSync(
     paths.config,
-    JSON.stringify({ quod, mode, ledgers: paths.ledgers, reports: paths.reports, root: process.env.GITHUB_WORKSPACE, require }),
+    JSON.stringify({ quod, mode, ledgers: paths.ledgers, reports: paths.reports, root: process.env.GITHUB_WORKSPACE }),
   )
-  core.exportVariable('NODE_OPTIONS', [process.env.NODE_OPTIONS, require].filter(Boolean).join(' '))
+  const bin = path.join(paths.base, 'bin')
+  fs.mkdirSync(bin, { recursive: true })
+  const q = (s) => `'${s.replace(/'/g, `'\\''`)}'`
+  fs.writeFileSync(
+    path.join(bin, 'node'),
+    `#!/bin/sh\n# Quod's node shim (pango07/quod-action): the real node, with the vitest shim preloaded.\n` +
+      `[ "$QUOD_SHIM_ACTIVE" = 1 ] && exec ${q(node)} "$@"\n` +
+      `exec ${q(node)} --require ${q(paths.hook)} "$@"\n`,
+    { mode: 0o755 },
+  )
+  core.addPath(bin)
   core.saveState('active', '1')
 }
 
