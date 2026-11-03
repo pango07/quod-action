@@ -153062,6 +153062,7 @@ const PINS = {
   'bin-d5fbfdc': 'ac4006cef111a3d09f3795a278b172b053daf4f11197feecb12f01278bbe26fb',
   'bin-d978cc4': '0287d29bdf41ecb1e96ebb710e2c98c4c964924d87ff62af5121f0e67086d6f1',
   'bin-0bb0c27': '54533fc3907868edd37c9c79ad15e2fa939449a09679332dee320069b4032259',
+  'bin-c6f6ed3': 'a323c1204db58e8b32bef8801d1ea7dec5b791ebd6bff1fc4ffb772087267128',
 }
 
 async function install(version, want) {
