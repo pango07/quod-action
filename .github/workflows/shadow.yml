@@ -47,9 +47,10 @@ jobs:
   record:
     if: ${{ !cancelled() && github.event.pull_request.head.repo.fork != true }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
+    # No `permissions:` here: the job inherits the caller's. A called workflow
+    # that asks for more than its caller grants fails the whole workflow at
+    # startup, so asking here would break every caller without id-token.
+    # Grant `contents: read` and `id-token: write` on the calling job (README).
     continue-on-error: true
     timeout-minutes: 30
     steps:
