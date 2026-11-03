@@ -63,6 +63,17 @@ function nodeFacts() {
   return { bin: node, node: version, npm: D.npmVersion(node) }
 }
 
+// Whether this job may save what it installed. The Actions cache scopes a
+// save to the job's ref, but a pull_request_target or workflow_run job runs
+// on the base branch's ref with someone else's code: what it saves, the
+// base branch would restore. Only jobs on the repository's own code save
+// (the server's rule for its writers and branch scopes).
+function maySave() {
+  const ev = process.env.GITHUB_EVENT_NAME
+  if (!['push', 'pull_request', 'merge_group', 'workflow_dispatch', 'schedule'].includes(ev)) return false
+  return ev !== 'pull_request' || scope().trusted
+}
+
 const home = () => process.env.HOME || require('node:os').homedir()
 
 // Dependencies: what the project's package manager installs from,
@@ -79,7 +90,7 @@ async function dependencies(facts) {
   const t0 = Date.now()
   const key = D.key(root, info, facts)
   const os = `${process.platform}-${process.arch}`
-  const st = { root: fs.realpathSync(root), info, pm: info.pm, key, facts: { node: facts.node, npm: facts.npm }, hit: '' }
+  const st = { ws, root: fs.realpathSync(root), info, pm: info.pm, key, facts: { node: facts.node, npm: facts.npm }, hit: '', save: maySave() }
   if (info.pm === 'npm') {
     st.paths = D.npmPaths(ws, root)
     st.cacheKey = `quod-deps-npm-${os}-${key}`
@@ -100,8 +111,8 @@ async function dependencies(facts) {
       if (!hit) {
         // npm's download cache, when nothing restored one: the nearest
         // earlier lockfile's tarballs make `npm ci` mostly offline.
-        const npmCache = path.join(home(), '.npm')
-        if (!fs.existsSync(path.join(npmCache, '_cacache'))) {
+        const npmCache = path.join(home(), '.npm', '_cacache')
+        if (!fs.existsSync(npmCache)) {
           const lockHash = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, info.lock))).digest('hex').slice(0, 40)
           st.npmCache = { path: npmCache, key: `quod-npmcache-${os}-${lockHash}` }
           const h2 = await cache.restoreCache([npmCache], st.npmCache.key, [`quod-npmcache-${os}-`])

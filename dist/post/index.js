@@ -152243,7 +152243,7 @@ const fs = __nccwpck_require__(73024)
 const path = __nccwpck_require__(76760)
 const crypto = __nccwpck_require__(77598)
 
-const VERSION = 'quod-deps-v2'
+const VERSION = 'quod-deps-v3'
 
 // Lifecycle scripts `npm ci` runs for the project's own packages.
 const LIFECYCLE = ['preinstall', 'install', 'postinstall', 'prepublish', 'preprepare', 'prepare', 'postprepare', 'dependencies']
@@ -152378,7 +152378,20 @@ function key(root, info, facts, env = process.env) {
   for (const m of manifests(root)) add(`manifest ${m}`, read(path.join(root, m)))
   for (const f of ['.npmrc', '.yarnrc', '.yarnrc.yml', 'pnpm-workspace.yaml', '.pnpmfile.cjs', 'bunfig.toml']) add(f, read(path.join(root, f)))
   add('node', facts.node)
-  if (info.pm === 'npm') add('npm', facts.npm)
+  if (info.pm === 'npm') {
+    add('npm', facts.npm)
+    // npm's user and global config files (setup-node's registry-url writes
+    // one): `omit`, `legacy-peer-deps`, `ignore-scripts` there change what
+    // `npm ci` installs.
+    const pick = (k) => env[k] ?? env[k.toLowerCase()]
+    const home = env.HOME || (__nccwpck_require__(48161).homedir)()
+    add('userconfig', read(pick('NPM_CONFIG_USERCONFIG') || path.join(home, '.npmrc')))
+    let prefix = ''
+    try {
+      prefix = path.dirname(path.dirname(fs.realpathSync(facts.bin)))
+    } catch {}
+    add('globalconfig', read(pick('NPM_CONFIG_GLOBALCONFIG') || path.join(prefix, 'etc', 'npmrc')))
+  }
   add('platform', process.platform)
   add('arch', process.arch)
   add('ImageOS', env.ImageOS ?? '')
@@ -152445,6 +152458,41 @@ function npmArgs(args) {
   return out.sort()
 }
 
+// Every file, link and directory under the kept node_modules directories
+// (path, kind, size, mtime, mode), the runtime caches left out: taken when
+// \`npm ci\` finishes and again before the save, so a tree anything changed
+// after the install is not saved.
+function fullPrint(ws, paths) {
+  const h = crypto.createHash('sha256')
+  const skip = new Set(['.cache', '.vite', '.quod-vitest', '.quod-deps.json'])
+  const walk = (abs, rel, parentIsNm) => {
+    let ents
+    try {
+      ents = fs.readdirSync(abs).sort()
+    } catch {
+      return
+    }
+    for (const e of ents) {
+      if (parentIsNm && skip.has(e)) continue
+      const p = path.join(abs, e)
+      let st
+      try {
+        st = fs.lstatSync(p)
+      } catch {
+        continue
+      }
+      const r = `${rel}/${e}`
+      if (st.isSymbolicLink()) h.update(`l ${r} ${fs.readlinkSync(p)}\n`)
+      else if (st.isDirectory()) {
+        h.update(`d ${r} ${st.mode}\n`)
+        walk(p, r, e === 'node_modules')
+      } else h.update(`f ${r} ${st.size} ${st.mtimeMs} ${st.mode}\n`)
+    }
+  }
+  for (const p of paths) if (!p.startsWith('!')) walk(path.join(ws, p), p, true)
+  return h.digest('hex')
+}
+
 // A cheap print of the root node_modules: npm's hidden lockfile and the
 // top-level entries. Taken right after Quod's restore and again at `npm ci`:
 // anything that restored or installed over the tree in between (another
@@ -152473,7 +152521,7 @@ function treePrint(root) {
 
 const NPM_CI = ['ci', 'clean-install', 'ic', 'install-clean', 'isntall-clean']
 
-module.exports = { VERSION, detect, findRoot, manifests, npmVersion, key, npmPaths, npmUnsafe, npmArgs, treePrint, NPM_CI }
+module.exports = { VERSION, detect, findRoot, manifests, npmVersion, key, npmPaths, npmUnsafe, npmArgs, treePrint, fullPrint, NPM_CI }
 
 
 /***/ }),
@@ -153008,6 +153056,7 @@ async function dependencies() {
   if (!raw) return
   const st = JSON.parse(raw)
   if (st.hit === 'exact' || st.hit === 'preexisting') return
+  if (!st.save) return core.info(`Quod dependencies: a ${process.env.GITHUB_EVENT_NAME} job does not save (it may run someone else's code on the base branch's cache scope)`)
   if (st.pm === 'npm') {
     let installed = null
     try {
@@ -153017,6 +153066,7 @@ async function dependencies() {
     if (installed.key !== st.key) return core.info('Quod dependencies: the install ran on other inputs than the job started with; nothing saved')
     const unsafe = D.npmUnsafe(st.root)
     if (unsafe) return core.info(`Quod dependencies: node_modules is not saved: ${unsafe}`)
+    if (D.fullPrint(st.ws, st.paths) !== installed.print) return core.info('Quod dependencies: node_modules changed after `npm ci`; not saved')
     if (st.npmCache && st.npmCache.hit !== 'exact') {
       try {
         await cache.saveCache([st.npmCache.path], st.npmCache.key)

@@ -45,6 +45,7 @@ async function dependencies() {
   if (!raw) return
   const st = JSON.parse(raw)
   if (st.hit === 'exact' || st.hit === 'preexisting') return
+  if (!st.save) return core.info(`Quod dependencies: a ${process.env.GITHUB_EVENT_NAME} job does not save (it may run someone else's code on the base branch's cache scope)`)
   if (st.pm === 'npm') {
     let installed = null
     try {
@@ -54,6 +55,7 @@ async function dependencies() {
     if (installed.key !== st.key) return core.info('Quod dependencies: the install ran on other inputs than the job started with; nothing saved')
     const unsafe = D.npmUnsafe(st.root)
     if (unsafe) return core.info(`Quod dependencies: node_modules is not saved: ${unsafe}`)
+    if (D.fullPrint(st.ws, st.paths) !== installed.print) return core.info('Quod dependencies: node_modules changed after `npm ci`; not saved')
     if (st.npmCache && st.npmCache.hit !== 'exact') {
       try {
         await cache.saveCache([st.npmCache.path], st.npmCache.key)

@@ -140,11 +140,16 @@ function npmCi(bin, args) {
   } catch {
     return
   }
+  // Whatever an earlier `npm ci` of this job left, this one decides.
+  const record = path.join(__dirname, 'deps-installed.json')
+  try {
+    fs.rmSync(record, { force: true })
+  } catch {}
   const want = D.npmArgs(args.slice(1))
   let now
   try {
     const npm = JSON.parse(fs.readFileSync(path.join(path.dirname(entry), '..', 'package.json'), 'utf8')).version
-    now = D.key(st.root, st.info, { node: process.version, npm })
+    now = D.key(st.root, st.info, { node: process.version, npm, bin: process.execPath })
   } catch {
     return
   }
@@ -164,7 +169,7 @@ function npmCi(bin, args) {
   process.on('exit', (code) => {
     if (code !== 0) return
     try {
-      fs.writeFileSync(path.join(__dirname, 'deps-installed.json'), JSON.stringify({ key: now, args: want }))
+      fs.writeFileSync(record, JSON.stringify({ key: now, args: want, print: D.fullPrint(st.ws, st.paths) }))
     } catch {}
   })
 }
