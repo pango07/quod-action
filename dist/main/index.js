@@ -152733,6 +152733,7 @@ const PINS = {
   'bin-0f9ef16': '4035f02e13977e7e4b9d29c67212d2d2cf6c26119c60337a585a70c9ecb876e0',
   'bin-0602b10': '0f0650b7cbcb024b1fc459d45ed96ea76ac4b330b380de4163cb6cf4a8824bea',
   'bin-d03fb70': '3208a79fda5e4d66a3225428fd215b4a8d0726e376da13c7d019a358d9b50840',
+  'bin-1dd00b0': '12c1abb1ef7ab11ec333a7e9cb0ced784b124549bc8c296ef1fa17bf2e74ebcd',
 }
 
 async function install(version, want) {
