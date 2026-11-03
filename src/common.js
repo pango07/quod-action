@@ -50,10 +50,14 @@ function scope() {
   return { branch: process.env.GITHUB_REF_NAME, sha: process.env.GITHUB_SHA, fallback, trusted: true }
 }
 
+// A cache entry is immutable: each job that records saves its own (run,
+// attempt, job), so a re-run of a commit, which may be its second witness,
+// is kept too; a restore takes the newest under the branch's prefix.
 function keys(s) {
   const k = (b) => `quod-vitest-${b}-`
   const restore = [...new Set([s.branch, s.base, s.fallback].filter(Boolean).map(k))]
-  return { key: `${k(s.branch)}${s.sha}`, restore }
+  const job = [process.env.GITHUB_RUN_ID, process.env.GITHUB_RUN_ATTEMPT, process.env.GITHUB_JOB].filter(Boolean).join('-')
+  return { key: `${k(s.branch)}${s.sha}${job ? `-${job}` : ''}`, restore }
 }
 
 module.exports = { paths, scope, keys }

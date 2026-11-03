@@ -12,17 +12,23 @@ branding:
 inputs:
   mode:
     description: >
-      check (default): your CI job. Every `vitest run` replays what the last
-      recording proves unchanged and runs the rest; the ledger is only read.
-      shadow: the recording job (pango07/quod-action/.github/workflows/shadow.yml,
-      after your CI job in the same workflow); runs the same command with
-      recording, audits, and saves the ledger.
+      check (default): your CI job. Every `vitest run` replays what the
+      ledger proves unchanged (seen twice: the second witness) and runs and
+      records the rest, then saves the ledger (Quod Cloud, else the Actions
+      cache). shadow: the older separate recording job
+      (.github/workflows/shadow.yml); still works, no longer needed.
     required: false
     default: check
+  record:
+    description: >
+      check mode: record in this job (true, the default). false: only read the
+      ledger, as before, for a setup that keeps the shadow job.
+    required: false
+    default: 'true'
   version:
     description: The quod release (a bin-<sha> release of pango07/ci-bench)
     required: false
-    default: bin-d40c669
+    default: bin-c8a44d5
   sha256:
     description: SHA-256 of that release's quod-linux-x86_64.tar.gz (required when version is set)
     required: false

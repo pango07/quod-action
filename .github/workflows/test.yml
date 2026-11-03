@@ -1,6 +1,7 @@
 # The action on a small vitest project, the way a customer uses it: one
 # line, then the project's own test commands (an npm script, npx, the .bin
-# shim). The shadow job records after it; the next run replays.
+# shim). The job records as it runs: the first run records, the second is
+# the second witness, the third replays.
 name: test
 on:
   push:
@@ -24,6 +25,12 @@ jobs:
         working-directory: test
       - run: npx vitest run tests/add.test.js
         working-directory: test
+      - name: The second witness, then replays
+        working-directory: test
+        run: |
+          npm test
+          npm test 2>&1 | tee out.txt
+          grep -E 'replaying [1-9]' out.txt
       - name: QUOD_DISABLE=1 is plain vitest
         run: npm test 2>&1 | tee out.txt; ! grep -q 'quod vitest' out.txt
         working-directory: test
@@ -36,15 +43,3 @@ jobs:
           if npx vitest run tests/fail.test.js; then echo "::error::a failing test passed"; exit 1; fi
           rm tests/fail.test.js
 
-  shadow:
-    needs: check
-    permissions:
-      contents: read
-      id-token: write
-    uses: ./.github/workflows/shadow.yml
-    with:
-      test: npm test && npx vitest run tests/add.test.js
-      install: npm install --no-audit --no-fund
-      cache: ''
-      fetch-depth: 1
-      working-directory: test
