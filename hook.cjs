@@ -55,7 +55,19 @@
   fs.mkdirSync(cfg.reports, { recursive: true })
   // With Quod Cloud the ledger is the suite's on the server (the cache's
   // copy in `dir` is the fallback); its variables are quod's, not the tests'.
-  const cloud = cfg.cloud ? ['--cloud', '--suite', id] : []
+  // The suite's name in Quod Cloud is what people see: the package's
+  // directory from the repository root, plus the arguments when there are
+  // any (the same package run two ways is two suites).
+  const where = rel === 'root' ? '.' : rel
+  const suite = args.length ? `${where} ${args.join(' ')}` : where
+  const cloud = cfg.cloud ? ['--cloud', '--suite', suite] : []
+  // Which suite each ledger directory is (travels with the cache's copy):
+  // the next job's background restore names the suites by it.
+  try {
+    const names = path.join(cfg.ledgers, '.suites')
+    fs.mkdirSync(names, { recursive: true })
+    fs.writeFileSync(path.join(names, id), suite)
+  } catch {}
   // The action started this suite's restore in the background: wait for it
   // (quod then uses what it restored), at most 2 minutes; then stop it, so
   // quod's own restore never shares the directory with it.

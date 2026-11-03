@@ -24,6 +24,7 @@ const PINS = {
   'bin-d242bd2': '8cb00dea7c3b0b9f369cdfe15579c6cd61a917ee0e471460153111fac6cce394',
   'bin-48fec94': 'c22bffd824687790e12dc157249a080850dd9608c54b489be6ed67c7443dbd4d',
   'bin-3115603': '2c2dcf119575c5393080fbab8df1ba6f9b4cac54b52b77acacd2ecf959fc456f',
+  'bin-48c22e3': '604d6c2237faa04bae0f232966b535394bbd1778e49cbda946c7d5d76a02d6a4',
 }
 
 async function install(version, want) {
@@ -148,13 +149,26 @@ async function run() {
   const prefetch = path.join(paths.base, 'prefetch')
   if (cloud) {
     fs.mkdirSync(prefetch, { recursive: true })
-    const suites = fs.readdirSync(paths.ledgers, { withFileTypes: true }).filter((d) => d.isDirectory())
+    // Each ledger directory's suite name, as the hook wrote it (an older
+    // copy without names is not prefetched: the test step restores it).
+    const names = path.join(paths.ledgers, '.suites')
+    const suites = fs
+      .readdirSync(paths.ledgers, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !d.name.startsWith('.'))
+      .map((d) => {
+        try {
+          return { id: d.name, suite: fs.readFileSync(path.join(names, d.name), 'utf8') }
+        } catch {
+          return null
+        }
+      })
+      .filter(Boolean)
     const log = fs.openSync(path.join(prefetch, 'restore.log'), 'a')
     for (const d of suites) {
-      const state = path.join(prefetch, d.name)
+      const state = path.join(prefetch, d.id)
       const child = spawn(
         'sh',
-        ['-c', '"$0" vitest --dir "$1" --cloud --suite "$2" --cloud-only restore; echo "done $?" > "$3"', quod, path.join(paths.ledgers, d.name), d.name, state],
+        ['-c', '"$0" vitest --dir "$1" --cloud --suite "$2" --cloud-only restore; echo "done $?" > "$3"', quod, path.join(paths.ledgers, d.id), d.suite, state],
         { detached: true, stdio: ['ignore', log, log], env: { ...process.env, ...cloud }, cwd: process.env.GITHUB_WORKSPACE },
       )
       fs.writeFileSync(state, `running ${child.pid}`)
