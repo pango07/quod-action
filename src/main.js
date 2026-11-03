@@ -1,7 +1,15 @@
 'use strict'
-// Installs quod, restores the most recent recording (the ledger) and puts
-// the vitest shim (hook.cjs, through a node shim on PATH) for the rest of the job. Any
-// failure here leaves the job as it was: plain vitest.
+// Three independent parts, each of which leaves the job as it was when it
+// fails:
+// - dependencies (deps.cjs): restores node_modules (npm) or the package
+//   manager's store before your install step;
+// - task cache: points turbo (and Nx) at Quod Cloud's remote cache, so a
+//   task another job of this repository already ran replays;
+// - vitest: installs quod, restores the most recent recording (the
+//   ledger).
+// Then the node shim on PATH (hook.cjs preloaded) for the rest of the job:
+// it answers `npm ci` when node_modules is already its result, and runs
+// one-shot vitest runs through quod.
 const core = require('@actions/core')
 const cache = require('@actions/cache')
 const { DefaultArtifactClient } = require('@actions/artifact')
@@ -10,6 +18,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync, spawn } = require('node:child_process')
 const { paths, scope, keys } = require('./common')
+const D = require('../deps.cjs')
 
 // SHA-256 of each release's quod-linux-x86_64.tar.gz.
 const PINS = {
@@ -46,23 +55,214 @@ async function install(version, want) {
   return bin
 }
 
+// The node on PATH (setup-node's) and its npm: what your steps run.
+function nodeFacts() {
+  const node = execFileSync('sh', ['-c', 'command -v node'], { encoding: 'utf8' }).trim()
+  if (!node) throw new Error('no node on PATH: put this step after actions/setup-node')
+  const version = execFileSync(node, ['--version'], { encoding: 'utf8' }).trim()
+  return { bin: node, node: version, npm: D.npmVersion(node) }
+}
+
+const home = () => process.env.HOME || require('node:os').homedir()
+
+// Dependencies: what the project's package manager installs from,
+// restored before your install step (deps.cjs has what is kept and why).
+async function dependencies(facts) {
+  if (core.getInput('dependencies') === 'false') return null
+  const ws = process.env.GITHUB_WORKSPACE || process.cwd()
+  const root = D.findRoot(ws)
+  if (!root) {
+    core.info('Quod dependencies: no lockfile found; nothing restored')
+    return null
+  }
+  const info = D.detect(root)
+  const t0 = Date.now()
+  const key = D.key(root, info, facts)
+  const os = `${process.platform}-${process.arch}`
+  const st = { root: fs.realpathSync(root), info, pm: info.pm, key, facts: { node: facts.node, npm: facts.npm }, hit: '' }
+  if (info.pm === 'npm') {
+    st.paths = D.npmPaths(ws, root)
+    st.cacheKey = `quod-deps-npm-${os}-${key}`
+    if (fs.existsSync(path.join(root, 'node_modules'))) {
+      // Something else put node_modules there (another cache step): Quod
+      // leaves it and its install alone.
+      st.hit = 'preexisting'
+      core.info('Quod dependencies: node_modules is already there (another step restored it); left as it is')
+    } else {
+      const hit = await cache.restoreCache(st.paths.slice(), st.cacheKey)
+      st.hit = hit ? 'exact' : ''
+      if (hit) st.print = D.treePrint(root)
+      core.info(
+        hit
+          ? `Quod dependencies: node_modules restored for this lockfile (${key.slice(0, 12)}) in ${((Date.now() - t0) / 1000).toFixed(1)} s; \`npm ci\` will find it in place`
+          : `Quod dependencies: no node_modules saved yet for this lockfile (${key.slice(0, 12)}); \`npm ci\` installs, and the tree is saved after the job`,
+      )
+      if (!hit) {
+        // npm's download cache, when nothing restored one: the nearest
+        // earlier lockfile's tarballs make `npm ci` mostly offline.
+        const npmCache = path.join(home(), '.npm')
+        if (!fs.existsSync(path.join(npmCache, '_cacache'))) {
+          const lockHash = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, info.lock))).digest('hex').slice(0, 40)
+          st.npmCache = { path: npmCache, key: `quod-npmcache-${os}-${lockHash}` }
+          const h2 = await cache.restoreCache([npmCache], st.npmCache.key, [`quod-npmcache-${os}-`])
+          st.npmCache.hit = h2 === st.npmCache.key ? 'exact' : h2 ? 'prefix' : ''
+          if (h2) core.info(`Quod dependencies: npm's download cache restored (${h2 === st.npmCache.key ? 'this lockfile' : 'an earlier lockfile'})`)
+        }
+      }
+    }
+  } else {
+    // pnpm's store, yarn's and bun's caches: what the install fetches
+    // from. The install verifies them and runs as always.
+    let dir
+    if (info.pm === 'pnpm') {
+      try {
+        dir = execFileSync('pnpm', ['store', 'path'], { cwd: root, encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+      } catch {
+        dir = path.join(process.env.XDG_DATA_HOME || path.join(home(), '.local', 'share'), 'pnpm', 'store')
+      }
+    } else if (info.pm === 'yarn-berry') {
+      const rc = fs.existsSync(path.join(root, '.yarnrc.yml')) ? fs.readFileSync(path.join(root, '.yarnrc.yml'), 'utf8') : ''
+      dir = /^\s*enableGlobalCache:\s*false/m.test(rc) ? path.join(root, '.yarn', 'cache') : path.join(home(), '.yarn', 'berry', 'cache')
+    } else if (info.pm === 'yarn') {
+      try {
+        dir = execFileSync('yarn', ['cache', 'dir'], { cwd: root, encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+      } catch {
+        dir = path.join(home(), '.cache', 'yarn')
+      }
+    } else {
+      dir = path.join(process.env.BUN_INSTALL || path.join(home(), '.bun'), 'install', 'cache')
+    }
+    st.paths = [dir]
+    st.cacheKey = `quod-deps-${info.pm}-${os}-${key}`
+    let filled = false
+    try {
+      filled = fs.readdirSync(dir).length > 0
+    } catch {}
+    if (filled) {
+      st.hit = 'preexisting'
+      core.info(`Quod dependencies: ${dir} is already filled (another step restored it); left as it is`)
+    } else {
+      const hit = await cache.restoreCache(st.paths.slice(), st.cacheKey, [`quod-deps-${info.pm}-${os}-`])
+      st.hit = hit === st.cacheKey ? 'exact' : hit ? 'prefix' : ''
+      core.info(hit ? `Quod dependencies: ${info.pm}'s store restored (${st.hit === 'exact' ? 'this lockfile' : 'an earlier lockfile'}) in ${((Date.now() - t0) / 1000).toFixed(1)} s` : `Quod dependencies: no ${info.pm} store saved yet; saved after the job`)
+    }
+  }
+  core.saveState('deps', JSON.stringify(st))
+  return st
+}
+
+// The task cache: turbo's and Nx's remote cache pointed at Quod Cloud, for
+// a session the job's OIDC token buys. Your own remote cache settings win.
+async function taskCache(facts) {
+  if (core.getInput('task-cache') === 'false') return
+  const ws = process.env.GITHUB_WORKSPACE || process.cwd()
+  const root = D.findRoot(ws) || ws
+  const turbo = fs.existsSync(path.join(root, 'turbo.json')) || fs.existsSync(path.join(root, 'turbo.jsonc'))
+  const nx = fs.existsSync(path.join(root, 'nx.json'))
+  if (!turbo && !nx) return
+  const env = process.env
+  const useTurbo = turbo && !env.TURBO_API && !env.TURBO_TOKEN && !env.TURBO_TEAM && !env.TURBO_TEAMID
+  const useNx = nx && !env.NX_SELF_HOSTED_REMOTE_CACHE_SERVER && !env.NX_CLOUD_ACCESS_TOKEN && !env.NX_NO_CLOUD
+  if (!useTurbo && !useNx) {
+    core.info('Quod task cache: your own remote cache is configured; left as it is')
+    return
+  }
+  if (!env.ACTIONS_ID_TOKEN_REQUEST_URL) {
+    core.info('Quod task cache: needs `permissions: id-token: write`; off')
+    return
+  }
+  const server = core.getInput('server')
+  const id = await core.getIDToken('quodci')
+  const res = await fetch(`${server}/v1/task-cache/session`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'quod-protocol': 'quod.v1', authorization: `Bearer ${id}` },
+    body: JSON.stringify({ env: { os: env.RUNNER_OS || process.platform, arch: env.RUNNER_ARCH || process.arch, node: facts.node, image: env.ImageOS || '' } }),
+    signal: AbortSignal.timeout(15000),
+  })
+  if (!res.ok) throw new Error(`${server}: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`)
+  const s = await res.json()
+  core.setSecret(s.token)
+  core.saveState('task-token', s.token)
+  const where = s.write ? `writes ${s.write === 'trusted' ? 'the default branch' : 'this branch'}'s, reads ${s.read.length > 1 ? "it, then the default branch's" : 'it'}` : "reads the default branch's, writes none"
+  if (useTurbo) {
+    core.exportVariable('TURBO_API', server)
+    core.exportVariable('TURBO_TOKEN', s.token)
+    core.exportVariable('TURBO_TEAM', 'quod')
+    core.info(`Quod task cache: turbo's remote cache is Quod Cloud (${where})`)
+  }
+  if (useNx) {
+    core.exportVariable('NX_SELF_HOSTED_REMOTE_CACHE_SERVER', `${server}/nx`)
+    core.exportVariable('NX_SELF_HOSTED_REMOTE_CACHE_ACCESS_TOKEN', s.token)
+    core.info(`Quod task cache: Nx's remote cache is Quod Cloud (${where})`)
+  }
+}
+
 async function run() {
   const mode = core.getInput('mode') || 'check'
   core.saveState('mode', mode)
   if (process.env.QUOD_DISABLE === '1') {
-    core.info('QUOD_DISABLE=1: tests run as plain vitest')
+    core.info('QUOD_DISABLE=1: Quod is off for this job')
     return
   }
   if (!['check', 'shadow'].includes(mode)) throw new Error(`mode must be check or shadow, not ${mode}`)
-  if (process.platform !== 'linux' || process.arch !== 'x64') {
-    core.warning(`Quod runs on Linux x64 runners so far (this is ${process.platform}-${process.arch}); tests run as plain vitest`)
+  if (process.platform === 'win32') {
+    core.warning('Quod runs on Linux and macOS runners so far; off for this job')
     return
+  }
+  const facts = nodeFacts()
+  fs.mkdirSync(paths.base, { recursive: true })
+  let deps = null
+  try {
+    deps = await dependencies(facts)
+  } catch (e) {
+    core.warning(`Quod dependencies are off for this job (${e.message}); your install runs as always`)
+  }
+  try {
+    await taskCache(facts)
+  } catch (e) {
+    core.warning(`Quod task cache is off for this job (${e.message}); tasks run as always`)
+  }
+  let tests = false
+  try {
+    tests = await vitest(mode)
+  } catch (e) {
+    core.warning(`Quod is off for vitest in this job (${e.message}); tests run as plain vitest`)
+  }
+  if (!deps && !tests) return
+  // The shim: a `node` first on PATH that runs the real one with hook.cjs
+  // preloaded. Whatever starts vitest or npm (npm scripts, npx, turbo,
+  // pnpm, a `#!/usr/bin/env node` bin) finds node on PATH; GitHub refuses
+  // NODE_OPTIONS from an action ($GITHUB_ENV), and turbo filters most
+  // variables from its tasks, but every runner keeps PATH.
+  fs.copyFileSync(path.join(__dirname, '..', '..', 'hook.cjs'), paths.hook)
+  fs.copyFileSync(path.join(__dirname, '..', '..', 'deps.cjs'), path.join(paths.base, 'deps.cjs'))
+  if (deps) fs.writeFileSync(path.join(paths.base, 'deps.json'), JSON.stringify(deps))
+  const bin = path.join(paths.base, 'bin')
+  fs.mkdirSync(bin, { recursive: true })
+  const q = (s) => `'${s.replace(/'/g, `'\\''`)}'`
+  fs.writeFileSync(
+    path.join(bin, 'node'),
+    `#!/bin/sh\n# Quod's node shim (pango07/quod-action): the real node, with hook.cjs preloaded.\n` +
+      `[ "$QUOD_SHIM_ACTIVE" = 1 ] && exec ${q(facts.bin)} "$@"\n` +
+      `exec ${q(facts.bin)} --require ${q(paths.hook)} "$@"\n`,
+    { mode: 0o755 },
+  )
+  core.addPath(bin)
+  core.saveState('active', '1')
+}
+
+// vitest: quod installed, the ledger restored, the hook's config written.
+// True when vitest goes through quod in this job.
+async function vitest(mode) {
+  if (process.platform !== 'linux' || process.arch !== 'x64') {
+    core.info(`Quod's vitest replay runs on Linux x64 runners so far (this is ${process.platform}-${process.arch}); tests run as plain vitest`)
+    return false
   }
   const s = scope()
   if (mode === 'shadow' && !s.trusted) {
     // A fork's code must not write a ledger every branch reads.
     core.notice('Quod: not recording a fork pull request (its code is not trusted to write the ledger)')
-    return
+    return false
   }
   fs.mkdirSync(paths.ledgers, { recursive: true })
   fs.mkdirSync(paths.reports, { recursive: true })
@@ -106,13 +306,6 @@ async function run() {
   core.saveState('hit', hit === k.key ? 'exact' : hit ? 'prefix' : '')
   core.info(hit ? `Quod: the recording ${hit}` : 'Quod: no recording yet; every test file runs (and the shadow records them)')
 
-  // The shim: a `node` first on PATH that runs the real one with hook.cjs
-  // preloaded. Whatever starts vitest (npm scripts, npx, turbo, pnpm, a
-  // `#!/usr/bin/env node` bin) finds node on PATH; GitHub refuses
-  // NODE_OPTIONS from an action ($GITHUB_ENV), and turbo filters most
-  // variables from its tasks, but every runner keeps PATH.
-  const node = execFileSync('sh', ['-c', 'command -v node'], { encoding: 'utf8' }).trim()
-  if (!node) throw new Error('no node on PATH: put this step after actions/setup-node')
   // Quod Cloud, when this quod has it and the job may ask GitHub for an OIDC
   // token (`permissions: id-token: write`): quod then stores and finds the
   // ledger on the server (nearest recorded ancestor commit), and the cache
@@ -189,24 +382,12 @@ async function run() {
     }
     if (suites.length) core.info(`Quod: restoring ${suites.length} suites from Quod Cloud in the background`)
   }
-  fs.copyFileSync(path.join(__dirname, '..', '..', 'hook.cjs'), paths.hook)
   fs.writeFileSync(
     paths.config,
     JSON.stringify({ quod, mode, ledgers: paths.ledgers, reports: paths.reports, root: process.env.GITHUB_WORKSPACE, cloud, prefetch }),
     { mode: 0o600 },
   )
-  const bin = path.join(paths.base, 'bin')
-  fs.mkdirSync(bin, { recursive: true })
-  const q = (s) => `'${s.replace(/'/g, `'\\''`)}'`
-  fs.writeFileSync(
-    path.join(bin, 'node'),
-    `#!/bin/sh\n# Quod's node shim (pango07/quod-action): the real node, with the vitest shim preloaded.\n` +
-      `[ "$QUOD_SHIM_ACTIVE" = 1 ] && exec ${q(node)} "$@"\n` +
-      `exec ${q(node)} --require ${q(paths.hook)} "$@"\n`,
-    { mode: 0o755 },
-  )
-  core.addPath(bin)
-  core.saveState('active', '1')
+  return true
 }
 
-run().catch((e) => core.warning(`Quod is off for this job (${e.message}); tests run as plain vitest`))
+run().catch((e) => core.warning(`Quod is off for this job (${e.message})`))

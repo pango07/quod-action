@@ -8,12 +8,15 @@ const { DefaultArtifactClient } = require('@actions/artifact')
 const fs = require('node:fs')
 const path = require('node:path')
 const { paths } = require('./common')
+const D = require('../deps.cjs')
 
 // Credentials the job holds: none of their values may leave in a report
 // artifact or a cached ledger.
 const CREDENTIALS = ['ACTIONS_ID_TOKEN_REQUEST_TOKEN', 'ACTIONS_ID_TOKEN_REQUEST_URL', 'ACTIONS_RUNTIME_TOKEN', 'ACTIONS_RESULTS_URL', 'QUOD_SERVER_TOKEN']
 function leaks(files) {
   const secrets = CREDENTIALS.map((k) => [k, process.env[k]]).filter(([, v]) => v && v.length >= 16)
+  const task = core.getState('task-token')
+  if (task) secrets.push(['the task-cache session', task])
   for (const f of files) {
     let b
     try {
@@ -35,8 +38,52 @@ function walk(dir) {
   return out
 }
 
+// Saves what the install put down, when this job installed it and nothing
+// outside the key can have gone into it (deps.cjs).
+async function dependencies() {
+  const raw = core.getState('deps')
+  if (!raw) return
+  const st = JSON.parse(raw)
+  if (st.hit === 'exact' || st.hit === 'preexisting') return
+  if (st.pm === 'npm') {
+    let installed = null
+    try {
+      installed = JSON.parse(fs.readFileSync(path.join(paths.base, 'deps-installed.json'), 'utf8'))
+    } catch {}
+    if (!installed) return core.info('Quod dependencies: no `npm ci` finished in this job; nothing saved')
+    if (installed.key !== st.key) return core.info('Quod dependencies: the install ran on other inputs than the job started with; nothing saved')
+    const unsafe = D.npmUnsafe(st.root)
+    if (unsafe) return core.info(`Quod dependencies: node_modules is not saved: ${unsafe}`)
+    if (st.npmCache && st.npmCache.hit !== 'exact') {
+      try {
+        await cache.saveCache([st.npmCache.path], st.npmCache.key)
+      } catch (e) {
+        core.info(`Quod dependencies: npm's download cache not saved (${e.message})`)
+      }
+    }
+    fs.writeFileSync(path.join(st.root, 'node_modules', '.quod-deps.json'), JSON.stringify({ key: st.key, args: installed.args, npm: st.facts.npm }))
+    const t0 = Date.now()
+    await cache.saveCache(st.paths.slice(), st.cacheKey)
+    core.info(`Quod dependencies: node_modules saved for this lockfile (${st.key.slice(0, 12)}) in ${((Date.now() - t0) / 1000).toFixed(1)} s`)
+    return
+  }
+  let filled = false
+  try {
+    filled = fs.readdirSync(st.paths[0]).length > 0
+  } catch {}
+  if (!filled) return
+  const t0 = Date.now()
+  await cache.saveCache(st.paths.slice(), st.cacheKey)
+  core.info(`Quod dependencies: ${st.pm}'s store saved in ${((Date.now() - t0) / 1000).toFixed(1)} s`)
+}
+
 async function run() {
   if (core.getState('active') !== '1') return
+  try {
+    await dependencies()
+  } catch (e) {
+    core.info(`Quod dependencies: not saved (${e.message})`)
+  }
   const mode = core.getState('mode')
   if (mode === 'check') {
     const files = fs.existsSync(paths.reports)

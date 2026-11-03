@@ -16,6 +16,7 @@
   const env = process.env
   if (env.QUOD_SHIM_ACTIVE === '1' || env.QUOD_DISABLE === '1') return
   const bin = argv[1]
+  if (bin && /npm(-cli\.js)?$/.test(bin)) return npmCi(bin, argv.slice(2))
   if (!bin || !/vitest(\.m?js)?$/.test(bin)) return
   const fs = require('node:fs')
   const path = require('node:path')
@@ -110,3 +111,60 @@
   if (cfg.mode === 'shadow') process.exit(0)
   process.exit(r.status ?? 1)
 })()
+
+// `npm ci` in the project Quod restored node_modules for (deps.cjs). npm ci
+// deletes node_modules and installs the lockfile; when the tree on disk is
+// already what an earlier `npm ci` installed from the same key (the
+// lockfile, every package.json, .npmrc, node, npm, OS, arch, image and npm's
+// environment), with the same arguments, and nothing has touched it since
+// Quod restored it, this answers for npm: exit 0, nothing changed.
+// Otherwise npm runs as always, and a successful install is noted for the
+// post step, which saves the tree when nothing outside the key can have
+// gone into it.
+function npmCi(bin, args) {
+  const fs = require('node:fs')
+  const path = require('node:path')
+  let entry
+  try {
+    entry = fs.realpathSync(bin)
+  } catch {
+    return
+  }
+  if (!entry.endsWith(`${path.sep}npm${path.sep}bin${path.sep}npm-cli.js`)) return
+  let D, st
+  try {
+    D = require(path.join(__dirname, 'deps.cjs'))
+    if (!D.NPM_CI.includes(args[0])) return
+    st = JSON.parse(fs.readFileSync(path.join(__dirname, 'deps.json'), 'utf8'))
+    if (st.pm !== 'npm' || fs.realpathSync(process.cwd()) !== st.root) return
+  } catch {
+    return
+  }
+  const want = D.npmArgs(args.slice(1))
+  let now
+  try {
+    const npm = JSON.parse(fs.readFileSync(path.join(path.dirname(entry), '..', 'package.json'), 'utf8')).version
+    now = D.key(st.root, st.info, { node: process.version, npm })
+  } catch {
+    return
+  }
+  if (st.hit === 'exact' && now === st.key) {
+    let marker = null
+    try {
+      marker = JSON.parse(fs.readFileSync(path.join(st.root, 'node_modules', '.quod-deps.json'), 'utf8'))
+    } catch {}
+    const same = marker && marker.key === now && JSON.stringify(marker.args) === JSON.stringify(want)
+    if (same && D.treePrint(st.root) === st.print) {
+      console.log(`quod: node_modules is what \`npm ci\` installs here (restored for this lockfile, package.json files, node ${process.version} and npm ${marker.npm ?? ''}); npm ci skipped`)
+      process.exit(0)
+    }
+    if (!same) console.log('quod: the restored node_modules was installed another way; npm ci runs')
+    else console.log('quod: node_modules changed after Quod restored it; npm ci runs')
+  }
+  process.on('exit', (code) => {
+    if (code !== 0) return
+    try {
+      fs.writeFileSync(path.join(__dirname, 'deps-installed.json'), JSON.stringify({ key: now, args: want }))
+    } catch {}
+  })
+}

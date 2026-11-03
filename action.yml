@@ -1,9 +1,10 @@
 name: Quod
 description: >
-  Replays the vitest test files whose inputs did not change and runs the rest,
-  inside your existing test command (vitest, npm test, npx turbo run test).
-  One line in your CI job, after setup-node; recording happens in a separate,
-  non-blocking workflow (mode: shadow).
+  Makes your Node CI job faster without changing it: restores your
+  dependencies before your install step (npm ci finds node_modules in place),
+  points turbo's and Nx's remote cache at Quod Cloud, and replays the vitest
+  test files whose inputs did not change. One line in your CI job, after
+  setup-node; recording happens in a separate, non-blocking job (mode: shadow).
 author: pango07
 branding:
   icon: fast-forward
@@ -30,6 +31,20 @@ inputs:
     description: >
       Use Quod Cloud for the ledger when this quod supports it and the job has
       `permissions: id-token: write` (true); false keeps it in the Actions cache.
+    required: false
+    default: 'true'
+  dependencies:
+    description: >
+      Restore and save what your install puts down (true): node_modules for npm
+      (`npm ci` then finds it in place), the store for pnpm, yarn and bun.
+      false leaves your install alone.
+    required: false
+    default: 'true'
+  task-cache:
+    description: >
+      Point turbo's (TURBO_API, TURBO_TOKEN, TURBO_TEAM) and Nx's remote cache at
+      Quod Cloud when the job has `permissions: id-token: write` and none of your
+      own is configured (true); false leaves them alone.
     required: false
     default: 'true'
   server:
