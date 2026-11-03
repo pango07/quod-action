@@ -152721,7 +152721,7 @@ const { DefaultArtifactClient } = __nccwpck_require__(76846)
 const crypto = __nccwpck_require__(77598)
 const fs = __nccwpck_require__(73024)
 const path = __nccwpck_require__(76760)
-const { execFileSync } = __nccwpck_require__(31421)
+const { execFileSync, spawn } = __nccwpck_require__(31421)
 const { paths, scope, keys } = __nccwpck_require__(65128)
 
 // SHA-256 of each release's quod-linux-x86_64.tar.gz.
@@ -152734,6 +152734,7 @@ const PINS = {
   'bin-0602b10': '0f0650b7cbcb024b1fc459d45ed96ea76ac4b330b380de4163cb6cf4a8824bea',
   'bin-d03fb70': '3208a79fda5e4d66a3225428fd215b4a8d0726e376da13c7d019a358d9b50840',
   'bin-1dd00b0': '12c1abb1ef7ab11ec333a7e9cb0ced784b124549bc8c296ef1fa17bf2e74ebcd',
+  'bin-d242bd2': '8cb00dea7c3b0b9f369cdfe15579c6cd61a917ee0e471460153111fac6cce394',
 }
 
 async function install(version, want) {
@@ -152837,10 +152838,35 @@ async function run() {
       }
     }
   }
+  // Restore from Quod Cloud now, in the background, while your install
+  // runs: one detached `quod vitest --cloud-only restore` per suite this
+  // repository's last recording had (the suites in the cache's copy). quod
+  // leaves a marker for this job; the test step's `quod vitest --cloud`
+  // then uses that ledger instead of fetching it again. The hook waits for
+  // a restore still running (up to 2 minutes, then stops it and fetches
+  // itself); a failed one just means the test step fetches, or every file
+  // runs. A test step that never runs leaves it to the job's cleanup.
+  const prefetch = path.join(paths.base, 'prefetch')
+  if (cloud) {
+    fs.mkdirSync(prefetch, { recursive: true })
+    const suites = fs.readdirSync(paths.ledgers, { withFileTypes: true }).filter((d) => d.isDirectory())
+    const log = fs.openSync(path.join(prefetch, 'restore.log'), 'a')
+    for (const d of suites) {
+      const state = path.join(prefetch, d.name)
+      const child = spawn(
+        'sh',
+        ['-c', '"$0" vitest --dir "$1" --cloud --suite "$2" --cloud-only restore; echo "done $?" > "$3"', quod, path.join(paths.ledgers, d.name), d.name, state],
+        { detached: true, stdio: ['ignore', log, log], env: { ...process.env, ...cloud }, cwd: process.env.GITHUB_WORKSPACE },
+      )
+      fs.writeFileSync(state, `running ${child.pid}`)
+      child.unref()
+    }
+    if (suites.length) core.info(`Quod: restoring ${suites.length} suites from Quod Cloud in the background`)
+  }
   fs.copyFileSync(path.join(__dirname, '..', '..', 'hook.cjs'), paths.hook)
   fs.writeFileSync(
     paths.config,
-    JSON.stringify({ quod, mode, ledgers: paths.ledgers, reports: paths.reports, root: process.env.GITHUB_WORKSPACE, cloud }),
+    JSON.stringify({ quod, mode, ledgers: paths.ledgers, reports: paths.reports, root: process.env.GITHUB_WORKSPACE, cloud, prefetch }),
   )
   const bin = path.join(paths.base, 'bin')
   fs.mkdirSync(bin, { recursive: true })
