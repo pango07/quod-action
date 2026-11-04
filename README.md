@@ -74,9 +74,13 @@ the task cache also run on macOS runners.
   is never recorded.
 - **Always runs:** a test file that failed, started a child process, used
   the network, or wrote into the repository.
-- **Stays plain vitest:** watch mode, `--coverage`, `-u`, `--ui`,
-  `--browser`, `--shard`, `--changed`; anything outside Linux x64; any
-  failure to set up Quod.
+- **Coverage** (`--coverage`, or `coverage.enabled` in the config, v8 or
+  istanbul): each recorded file keeps its coverage; a replayed file's joins
+  the files that ran, and vitest's own provider writes every report and
+  checks the thresholds, as in a full run. Another provider, or
+  `thresholds.autoUpdate`, runs every file.
+- **Stays plain vitest:** watch mode, `-u`, `--ui`, `--browser`, `--shard`,
+  `--changed`; anything outside Linux x64; any failure to set up Quod.
 - **Trust:** a fork's pull request only reads the ledger and never records.
   A ledger can make a test report "pass" without running, so only code from
   your own repository writes one.
