@@ -153092,6 +153092,7 @@ const PINS = {
   'bin-e3ece95': 'bf87ff357f389800d55fdee19503aaa0d3a076c7b898edf847f219912d475a6a',
   'bin-69ddad8': '0f6fe0c7010ca480e653c3f5975c896407af400dd42029fa033d6063b63a5d85',
   'bin-9e9d0b7': '48801e6b3c0e3672117f75ddf52984ff753624cec849d43c68a61a30533a2322',
+  'bin-c0f55ad': '184442ceecb624e9c20300af2759fc4e178707e8a76de4ec9e969b9362118569',
 }
 
 // The release this action ships in dist/quod/<version>.tar.gz (the same
