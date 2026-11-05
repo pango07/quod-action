@@ -153071,7 +153071,7 @@ const D = __nccwpck_require__(60563)
 
 // SHA-256 of each release's quod-linux-x86_64.tar.gz.
 const PINS = {
-  'bin-9f50dbf': '3fda1ab2288fd56eba076aef37a825d1120f161d683aa975a8545c1c54b7f544',
+  'bin-ae52750': '9cbb48d36f41f79ee9d3470285c803dddba7651e3992f39687aa6838869bb41a',
   'bin-b9e34fc': 'caca43ddfeefd7bf05f771865ac69ac1b80a4bfad03bca7f667fa775400c2ac4',
   'bin-a026fea': 'f6594052a8ce0d61f915d019ba057be975475eba855a5c11fe5f664a72761fd8',
   'bin-34f932d': '9a1c2354cfdc5ab07b968e3a3a2929b58f9f6c34214ec2ad2876f225153032bc',
