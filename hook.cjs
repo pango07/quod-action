@@ -255,6 +255,9 @@ function npmCi(bin, args) {
   process.on('exit', (code) => {
     if (code !== 0) return
     try {
+      // Put the marker down now, before any build lists node_modules.
+      // Fresh installs and restored trees must expose the same filenames.
+      fs.writeFileSync(path.join(st.root, 'node_modules', '.quod-deps.json'), JSON.stringify({ key: now, args: want, npm: st.facts.npm }))
       fs.writeFileSync(record, JSON.stringify({ key: now, args: want, print: D.fullPrint(st.ws, st.paths) }))
     } catch {}
   })

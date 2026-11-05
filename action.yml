@@ -33,7 +33,7 @@ inputs:
       ships with this action (dist/quod/), so a job fetches nothing; another
       is downloaded.
     required: false
-    default: bin-c0f55ad
+    default: bin-8dc6916
   sha256:
     description: SHA-256 of that release's quod-linux-x86_64.tar.gz (required when version is set)
     required: false
@@ -58,6 +58,14 @@ inputs:
       own is configured (true); false leaves them alone.
     required: false
     default: 'true'
+  lineage-witness:
+    description: >
+      Reuse a plain-confirmed predecessor as the second witness after a
+      changed input, only when the new recorded read set and test states
+      agree and no test is near a timeout. Audit one in eight plain;
+      disagreement revokes the promotion batch. Experimental and switchable.
+    required: false
+    default: 'false'
   timing-sensitive:
     description: >
       off (default): a test file whose plain run took more than half a
