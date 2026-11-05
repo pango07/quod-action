@@ -235,31 +235,32 @@ async function run() {
   if (/^[1-9][0-9]*$/.test(audit)) core.exportVariable('QUOD_VITEST_TIMING_AUDIT', audit)
   const facts = nodeFacts()
   fs.mkdirSync(paths.base, { recursive: true })
-  let deps = null
-  try {
-    deps = await dependencies(facts)
-  } catch (e) {
+  // The three parts are independent (each its own cache entries and
+  // files): they run at once, so main costs the slowest of them, not
+  // their sum (node_modules' restore, ~3 s for convex-helpers, hides the
+  // quod install and the ledger's).
+  const t0 = Date.now()
+  const depsP = dependencies(facts).catch((e) => {
     core.warning(`Quod dependencies are off for this job (${e.message}); your install runs as always`)
-  }
-  try {
-    // GitHub's OIDC endpoint retries for minutes when it is slow; the task
-    // cache is never worth that. Past the deadline, tasks run as always.
-    let timer
-    await Promise.race([
-      taskCache(facts),
-      new Promise((_, no) => {
-        timer = setTimeout(() => no(new Error('no OIDC token or session within 10 s')), 10000)
-      }),
-    ]).finally(() => clearTimeout(timer))
-  } catch (e) {
-    core.warning(`Quod task cache is off for this job (${e.message}); tasks run as always`)
-  }
-  let tests = false
-  try {
-    tests = await vitest(mode)
-  } catch (e) {
+    return null
+  })
+  // GitHub's OIDC endpoint retries for minutes when it is slow; the task
+  // cache is never worth that. Past the deadline, tasks run as always.
+  let timer
+  const taskP = Promise.race([
+    taskCache(facts),
+    new Promise((_, no) => {
+      timer = setTimeout(() => no(new Error('no OIDC token or session within 10 s')), 10000)
+    }),
+  ])
+    .finally(() => clearTimeout(timer))
+    .catch((e) => core.warning(`Quod task cache is off for this job (${e.message}); tasks run as always`))
+  const testsP = vitest(mode).catch((e) => {
     core.warning(`Quod is off for vitest in this job (${e.message}); tests run as plain vitest`)
-  }
+    return false
+  })
+  const [deps, , tests] = await Promise.all([depsP, taskP, testsP])
+  core.info(`Quod: ready in ${((Date.now() - t0) / 1000).toFixed(1)} s`)
   if (!deps && !tests) return
   // The shim: a `node` first on PATH that runs the real one with hook.cjs
   // preloaded. Whatever starts vitest or npm (npm scripts, npx, turbo,
