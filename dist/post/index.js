@@ -90872,6 +90872,22 @@ module.exports = { paths, scope, keys }
 
 /***/ }),
 
+/***/ 64723:
+/***/ ((module) => {
+
+"use strict";
+
+
+// Start independent cache operations together, but retain each one's
+// failure policy and wait for every upload before the runner can exit.
+async function saveTogether(tasks) {
+  return Promise.allSettled(tasks.map((task) => Promise.resolve().then(task)))
+}
+module.exports = { saveTogether }
+
+
+/***/ }),
+
 /***/ 42078:
 /***/ ((module) => {
 
@@ -153051,6 +153067,7 @@ const fs = __nccwpck_require__(73024)
 const path = __nccwpck_require__(76760)
 const { paths } = __nccwpck_require__(65128)
 const D = __nccwpck_require__(60563)
+const { saveTogether } = __nccwpck_require__(64723)
 
 // Credentials the job holds: none of their values may leave in a report
 // artifact or a cached ledger.
@@ -153098,16 +153115,18 @@ async function dependencies() {
     const unsafe = D.npmUnsafe(st.root)
     if (unsafe) return core.info(`Quod dependencies: node_modules is not saved: ${unsafe}`)
     if (D.fullPrint(st.ws, st.paths) !== installed.print) return core.info('Quod dependencies: node_modules changed after `npm ci`; not saved')
-    if (st.npmCache && st.npmCache.hit !== 'exact') {
-      try {
-        await cache.saveCache([st.npmCache.path], st.npmCache.key)
-      } catch (e) {
-        core.info(`Quod dependencies: npm's download cache not saved (${e.message})`)
-      }
-    }
     fs.writeFileSync(path.join(st.root, 'node_modules', '.quod-deps.json'), JSON.stringify({ key: st.key, args: installed.args, npm: st.facts.npm }))
     const t0 = Date.now()
-    await cache.saveCache(st.paths.slice(), st.cacheKey)
+    const uploads = await saveTogether([
+      () => cache.saveCache(st.paths.slice(), st.cacheKey),
+      async () => {
+        if (st.npmCache && st.npmCache.hit !== 'exact') {
+          await cache.saveCache([st.npmCache.path], st.npmCache.key)
+        }
+      },
+    ])
+    if (uploads[1].status === 'rejected') core.info(`Quod dependencies: npm's download cache not saved (${uploads[1].reason.message})`)
+    if (uploads[0].status === 'rejected') throw uploads[0].reason
     core.info(`Quod dependencies: node_modules saved for this lockfile (${st.key.slice(0, 12)}) in ${((Date.now() - t0) / 1000).toFixed(1)} s`)
     return
   }
@@ -153123,11 +153142,12 @@ async function dependencies() {
 
 async function run() {
   if (core.getState('active') !== '1') return
-  try {
-    await dependencies()
-  } catch (e) {
-    core.info(`Quod dependencies: not saved (${e.message})`)
-  }
+  const results = await saveTogether([dependencies, saveTests])
+  if (results[0].status === 'rejected') core.info(`Quod dependencies: not saved (${results[0].reason.message})`)
+  if (results[1].status === 'rejected') throw results[1].reason
+}
+
+async function saveTests() {
   const mode = core.getState('mode')
   if (core.getState('vitest') !== '1') {
     // main said why (a failed quod install, an unsupported runner, ...).

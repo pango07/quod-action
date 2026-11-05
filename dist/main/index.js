@@ -153071,6 +153071,9 @@ const D = __nccwpck_require__(60563)
 
 // SHA-256 of each release's quod-linux-x86_64.tar.gz.
 const PINS = {
+  'bin-a026fea': 'f6594052a8ce0d61f915d019ba057be975475eba855a5c11fe5f664a72761fd8',
+  'bin-34f932d': '9a1c2354cfdc5ab07b968e3a3a2929b58f9f6c34214ec2ad2876f225153032bc',
+  'bin-8dc6916': 'ad5268aacd4fcd12a8760db8169fe82acb9cb7d2e8ffff538a67a58cb64b9e3f',
   'bin-cd358c8': 'f7bd0b7b33437582a2fd6d592ea286c6aae6a66195a13310223dc51e037c5d19',
   'bin-a084b71': 'c0ff034eecf8154af122440e9ff48f1ffcdeddbb0a2f495ce5ef71af20129519',
   'bin-c63b245': '2824e80e11aa530f098318d791a5134ff7c32f9ce99005fadbb6641f643148cd',
@@ -153304,6 +153307,7 @@ async function run() {
   // labelled with its margin. timing-audit: N: every Nth such replay runs
   // the file plain instead; a timeout there quarantines it.
   if (core.getInput('timing-sensitive') === 'replay') core.exportVariable('QUOD_VITEST_TIMING', 'replay')
+  core.exportVariable('QUOD_VITEST_LINEAGE', core.getInput('lineage-witness') === 'true' ? '1' : '0')
   const audit = core.getInput('timing-audit')
   if (/^[1-9][0-9]*$/.test(audit)) core.exportVariable('QUOD_VITEST_TIMING_AUDIT', audit)
   const facts = nodeFacts()
