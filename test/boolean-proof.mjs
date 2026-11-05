@@ -30,14 +30,14 @@ function manifest(exports) {
   if (exports !== undefined) pkg.exports = exports
   fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2)+'\n')
 }
-function config(valueRead = false, metadata = false) {
+function config(valueRead = false, metadata = false, asyncSearch = false) {
   fs.writeFileSync('vitest.config.mjs', `import fs, {readFileSync} from 'node:fs';
 import {defineConfig} from 'vitest/config';
 const file='package.json';
 const exists=${metadata ? 'fs.statSync(file).size > 0' : 'true'};
 const pkg=JSON.parse(readFileSync('package.json','utf8'));
 ${valueRead ? '' : 'const names=Object.keys({...pkg.dependencies,...pkg.devDependencies});'}
-export default defineConfig({test:{include:exists && ${valueRead ? "pkg.exports?.['./probe'] === './a.js'" : "names.includes('vitest')"} ? ['tests/add.test.js'] : ['tests/*.test.js']}});
+export default defineConfig({${asyncSearch ? '' : 'css:{postcss:{}},'}test:{include:exists && ${valueRead ? "pkg.exports?.['./probe'] === './a.js'" : "names.includes('vitest')"} ? ['tests/add.test.js'] : ['tests/*.test.js']}});
 `)
 }
 function clean() {fs.rmSync(ledgerRoot, {recursive:true, force:true})}
@@ -76,6 +76,15 @@ try {
   assert.doesNotMatch(absent.log, /1 recorded files: 1 replay, 0 to run/)
   compare(absent, 'exports-removed')
 
+  // Vite's default async PostCSS search passes raw manifest text to a
+  // configurable loader. Its read is not certified by the bounded proof.
+  // Preserve this real fallback, alongside the isolated positive case.
+  clean(); manifest({'./probe':'./a.js'}); config(false, false, true); warm()
+  manifest({'./probe':'./longer-file-name.js'})
+  const asyncRead = run('async-loader-keeps-whole-manifest')
+  assert.doesNotMatch(asyncRead.log, /1 recorded files: 1 replay, 0 to run/)
+  compare(asyncRead, 'async-loader-keeps-whole-manifest')
+
   clean(); manifest({'./probe':'./a.js'}); config(true); warm()
   manifest({'./probe':'./b.js'})
   const value = run('exports-value-changes-selection')
@@ -87,7 +96,7 @@ try {
   const metadata = run('stat-size-read-retains-input')
   assert.doesNotMatch(metadata.log, /1 recorded files: 1 replay, 0 to run/)
   compare(metadata, 'stat-size-read-retains-input')
-  console.log('Packaged boolean proof: equal truthiness replays, value/shape changes and disabled proof execute; all per-test states agree.')
+  console.log('Packaged boolean proof: certified truthiness replays; async raw reads, value/shape changes and disabled proof execute; all per-test states agree.')
 } finally {
   fs.writeFileSync('package.json', original)
   fs.rmSync('vitest.config.mjs', {force:true})
