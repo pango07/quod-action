@@ -33,7 +33,7 @@ inputs:
       ships with this action (dist/quod/), so a job fetches nothing; another
       is downloaded.
     required: false
-    default: bin-e3ece95
+    default: bin-69ddad8
   sha256:
     description: SHA-256 of that release's quod-linux-x86_64.tar.gz (required when version is set)
     required: false
