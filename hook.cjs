@@ -124,7 +124,7 @@
     cfg.mode === 'shadow'
       ? ['vitest', '--dir', dir, ...cloud, '--audits', '4', '--expect-report', report, '--', 'run', ...args]
       : cfg.record
-        ? ['vitest', '--dir', dir, ...cloud, '--report', report, '--', 'run', ...args]
+        ? ['vitest', '--dir', dir, ...cloud, '--report', report, '--summary', `${report}.summary`, '--', 'run', ...args]
         : ['vitest', '--no-record', '--dir', dir, ...cloud, '--report', report, '--', 'run', ...args]
   const r = require('node:child_process').spawnSync(cfg.quod, q, {
     stdio: 'inherit',
@@ -133,6 +133,19 @@
   if (r.error) {
     console.error(`quod: could not start (${r.error.message}); running vitest itself`)
     return
+  }
+  // Whether this run recorded anything (a full replay emitted records
+  // nothing): the post step saves the ledger only if one did.
+  if (cfg.record && cfg.mode !== 'shadow') {
+    let fast = false
+    try {
+      fast = JSON.parse(fs.readFileSync(`${report}.summary`, 'utf8')).fast === true
+    } catch {}
+    if (!fast) {
+      try {
+        fs.writeFileSync(path.join(__dirname, 'recorded'), '')
+      } catch {}
+    }
   }
   // The recording run is diagnostics only: it never fails the command (so a
   // task runner goes on to record every package).

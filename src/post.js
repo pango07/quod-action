@@ -118,6 +118,12 @@ async function run() {
 
 async function saveLedger() {
   const key = core.getState('key')
+  // Every vitest run of this job emitted a full replay (the hook marks one
+  // that recorded): the restored ledger is the newest; nothing to save.
+  if (core.getState('mode') === 'check' && !fs.existsSync(path.join(paths.base, 'recorded'))) {
+    core.info('Quod: nothing recorded in this job (every vitest run replayed in full); the ledger is not saved again')
+    return
+  }
   if (core.getState('hit') === 'exact') {
     core.info(`Quod: ${key} is already saved`)
     return
