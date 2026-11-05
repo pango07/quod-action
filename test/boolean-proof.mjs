@@ -43,15 +43,33 @@ export default defineConfig({test:{include:exists && ${valueRead ? "pkg.exports?
 function clean() {fs.rmSync(ledgerRoot, {recursive:true, force:true})}
 function warm() {run('record'); run('witness'); return run('warm')}
 function compare(result, label) {assert.deepEqual(result.states, run(label+'-plain', {QUOD_DISABLE:'1'}).states)}
+function diagnoseFallback() {
+  // A separate, code-hashed diagnostic recording. It never grants replay
+  // and does not turn a failed positive assertion into a passing result.
+  const code=path.resolve('node_modules/.quod-vitest'), dir=path.join(process.env.RUNNER_TEMP,'boolean-proof-diagnostic')
+  fs.mkdirSync(dir,{recursive:true})
+  const driver=fs.readFileSync(path.join(code,'driver.mjs'),'utf8').replace("r.keys.add('env:QUOD_VITEST_NAMES_PROOF')", `r.observeRead=(kind,p)=>{if(p===process.cwd()+'/package.json')console.error('MANIFEST_READ',kind,new Error().stack)};
+r.keys.add('env:QUOD_VITEST_NAMES_PROOF')`)
+  const recorder=fs.readFileSync(path.join(code,'record.mjs'),'utf8').replace('export function settledKeys(r) {', `export function settledKeys(r) {
+for(const [p,n] of r.pjReads)if(p===process.cwd()+'/package.json')console.error('MANIFEST_COUNTS',JSON.stringify({p,reads:n,parsed:r.pjParsed.get(p),keys:[...r.keys].filter(k=>k.includes(p))}));`)
+  fs.writeFileSync(path.join(dir,'driver.mjs'),driver)
+  fs.writeFileSync(path.join(dir,'record.mjs'),recorder)
+  run('diagnose-fallback',{QUOD_VITEST_JS_DIR:dir})
+}
 try {
   clean(); manifest({'./probe':'./a.js'}); config(); warm()
   manifest({'./probe':'./a-longer-different-value.js'})
   const truth = run('same-truthiness-different-bytes-and-size')
+  if (!/1 recorded files: 1 replay, 0 to run/.test(truth.log)) diagnoseFallback()
   assert.match(truth.log, /1 recorded files: 1 replay, 0 to run/)
   compare(truth, 'same-truthiness')
   const off = run('switch-off', {QUOD_VITEST_BOOLEAN_PROOF:'0'})
   assert.doesNotMatch(off.log, /1 recorded files: 1 replay, 0 to run/)
   compare(off, 'switch-off')
+  // Restore a trusted, enabled baseline so the shape check cannot pass
+  // merely because the opt-in environment input changed.
+  run('switch-back-record'); run('switch-back-witness')
+  assert.match(run('switch-back-warm').log, /1 recorded files: 1 replay, 0 to run/)
   manifest(undefined)
   const absent = run('exports-removed')
   assert.doesNotMatch(absent.log, /1 recorded files: 1 replay, 0 to run/)
