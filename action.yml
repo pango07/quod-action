@@ -55,6 +55,20 @@ inputs:
       own is configured (true); false leaves them alone.
     required: false
     default: 'true'
+  timing-sensitive:
+    description: >
+      off (default): a test file whose plain run took more than half a
+      test's timeout always runs. replay: it replays once two plain runs of
+      its unchanged inputs passed, and the log says at what fraction of its
+      timeout it passed (the timeout is the runner's load, not the code).
+    required: false
+    default: 'off'
+  timing-audit:
+    description: >
+      With timing-sensitive: replay, every Nth replay of such a file runs it
+      plain instead; a timeout there quarantines it (0: never).
+    required: false
+    default: '0'
   server:
     description: The Quod Cloud server
     required: false

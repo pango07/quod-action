@@ -225,6 +225,14 @@ async function run() {
     core.warning('Quod runs on Linux and macOS runners so far; off for this job')
     return
   }
+  // Per-repository policies for quod vitest (off by default).
+  // timing-sensitive: replay: a file whose plain runs came near a test's
+  // timeout replays once two plain runs of its unchanged inputs passed,
+  // labelled with its margin. timing-audit: N: every Nth such replay runs
+  // the file plain instead; a timeout there quarantines it.
+  if (core.getInput('timing-sensitive') === 'replay') core.exportVariable('QUOD_VITEST_TIMING', 'replay')
+  const audit = core.getInput('timing-audit')
+  if (/^[1-9][0-9]*$/.test(audit)) core.exportVariable('QUOD_VITEST_TIMING_AUDIT', audit)
   const facts = nodeFacts()
   fs.mkdirSync(paths.base, { recursive: true })
   let deps = null
