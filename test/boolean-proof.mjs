@@ -30,12 +30,11 @@ function manifest(exports) {
   if (exports !== undefined) pkg.exports = exports
   fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2)+'\n')
 }
-function config(valueRead = false, stat = false) {
+function config(valueRead = false, metadata = false) {
   fs.writeFileSync('vitest.config.mjs', `import fs from 'node:fs';
 import {defineConfig} from 'vitest/config';
-function tryStatSync(file) {try {return fs.statSync(file, {throwIfNoEntry:false});} catch {}}
 const file='package.json';
-const exists=${stat ? 'tryStatSync(file)?.isFile()' : 'true'};
+const exists=${metadata ? 'fs.statSync(file).size > 0' : 'true'};
 const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
 const one=exists && ${valueRead ? "pkg.exports?.['./probe'] === './a.js'" : '!!pkg.exports'};
 export default defineConfig({test:{include:one ? ['tests/add.test.js'] : ['tests/*.test.js']}});
@@ -45,7 +44,7 @@ function clean() {fs.rmSync(ledgerRoot, {recursive:true, force:true})}
 function warm() {run('record'); run('witness'); return run('warm')}
 function compare(result, label) {assert.deepEqual(result.states, run(label+'-plain', {QUOD_DISABLE:'1'}).states)}
 try {
-  clean(); manifest({'./probe':'./a.js'}); config(false, true); warm()
+  clean(); manifest({'./probe':'./a.js'}); config(); warm()
   manifest({'./probe':'./a-longer-different-value.js'})
   const truth = run('same-truthiness-different-bytes-and-size')
   assert.match(truth.log, /1 recorded files: 1 replay, 0 to run/)
@@ -63,6 +62,12 @@ try {
   const value = run('exports-value-changes-selection')
   assert.equal(value.states.length, 2)
   compare(value, 'exports-value-changes-selection')
+
+  clean(); manifest({'./probe':'./a.js'}); config(false, true); warm()
+  manifest({'./probe':'./longer-file-name.js'})
+  const metadata = run('stat-size-read-retains-input')
+  assert.doesNotMatch(metadata.log, /1 recorded files: 1 replay, 0 to run/)
+  compare(metadata, 'stat-size-read-retains-input')
   console.log('Packaged boolean proof: equal truthiness replays, value/shape changes and disabled proof execute; all per-test states agree.')
 } finally {
   fs.writeFileSync('package.json', original)
