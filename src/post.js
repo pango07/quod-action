@@ -88,6 +88,11 @@ async function run() {
     core.info(`Quod dependencies: not saved (${e.message})`)
   }
   const mode = core.getState('mode')
+  if (core.getState('vitest') !== '1') {
+    // main said why (a failed quod install, an unsupported runner, ...).
+    core.info('Quod was off for vitest in this job (see the quod step): tests ran as plain vitest; nothing recorded, nothing saved')
+    return
+  }
   if (mode === 'check' && core.getState('record') === '1') {
     // The ledger this job recorded, for the next job (Quod Cloud has it
     // already when the job could use it; the cache is the fallback).

@@ -40,18 +40,39 @@ const PINS = {
   'bin-d978cc4': '0287d29bdf41ecb1e96ebb710e2c98c4c964924d87ff62af5121f0e67086d6f1',
   'bin-0bb0c27': '54533fc3907868edd37c9c79ad15e2fa939449a09679332dee320069b4032259',
   'bin-c6f6ed3': 'a323c1204db58e8b32bef8801d1ea7dec5b791ebd6bff1fc4ffb772087267128',
+  'bin-e3ece95': 'bf87ff357f389800d55fdee19503aaa0d3a076c7b898edf847f219912d475a6a',
+}
+
+// The release this action ships in dist/quod/<version>.tar.gz (the same
+// file as the release asset, under the same SHA-256 pin): a job never
+// fetches quod over the network when it asks for that version, so a
+// release download's latency (5 s) and its failures (an HTTP 504 turned a
+// bench job plain) are off the job's path.
+function shipped(version, want) {
+  try {
+    // dist/main/index.js is what the runner started (argv[1]); a path the
+    // bundler cannot follow, so it does not copy the file into the bundle.
+    const here = path.dirname(process.argv[1] || __dirname)
+    const body = fs.readFileSync(path.join(here, '..', 'quod', `${version}.tar.gz`))
+    if (crypto.createHash('sha256').update(body).digest('hex') === want) return body
+  } catch {}
+  return null
 }
 
 async function install(version, want) {
   const dir = path.join(process.env.RUNNER_TOOL_CACHE || paths.base, 'quod', version)
   const bin = path.join(dir, 'quod')
   if (fs.existsSync(bin)) return bin
-  const url = `https://github.com/pango07/ci-bench/releases/download/${version}/quod-linux-x86_64.tar.gz`
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`)
-  const body = Buffer.from(await res.arrayBuffer())
-  const got = crypto.createHash('sha256').update(body).digest('hex')
-  if (got !== want) throw new Error(`${url}: sha256 ${got}, expected ${want}`)
+  let body = shipped(version, want)
+  core.info(`quod ${version}: ${body ? 'shipped with this action' : 'not shipped with this action; downloading the release'}`)
+  if (!body) {
+    const url = `https://github.com/pango07/ci-bench/releases/download/${version}/quod-linux-x86_64.tar.gz`
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`)
+    body = Buffer.from(await res.arrayBuffer())
+    const got = crypto.createHash('sha256').update(body).digest('hex')
+    if (got !== want) throw new Error(`${url}: sha256 ${got}, expected ${want}`)
+  }
   fs.mkdirSync(dir, { recursive: true })
   const tgz = path.join(dir, 'quod.tar.gz')
   fs.writeFileSync(tgz, body)
@@ -260,6 +281,8 @@ async function run() {
     return false
   })
   const [deps, , tests] = await Promise.all([depsP, taskP, testsP])
+  // For the post step: whether quod ran this job's vitest (and units).
+  core.saveState('vitest', tests ? '1' : '')
   core.info(`Quod: ready in ${((Date.now() - t0) / 1000).toFixed(1)} s`)
   if (!deps && !tests) return
   // The shim: a `node` first on PATH that runs the real one with hook.cjs
