@@ -54,6 +54,7 @@ r.keys.add('env:QUOD_VITEST_NAMES_PROOF')`)
 for(const [p,n] of r.pjReads)if(p===process.cwd()+'/package.json')console.error('MANIFEST_COUNTS',JSON.stringify({p,reads:n,parsed:r.pjParsed.get(p),keys:[...r.keys].filter(k=>k.includes(p))}));`)
   fs.writeFileSync(path.join(dir,'driver.mjs'),driver)
   fs.writeFileSync(path.join(dir,'record.mjs'),recorder)
+  clean() // Diagnose actual recorder reads, never an already-provisional plain witness.
   run('diagnose-fallback',{QUOD_VITEST_JS_DIR:dir})
 }
 try {
