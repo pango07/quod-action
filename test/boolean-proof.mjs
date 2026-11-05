@@ -31,13 +31,13 @@ function manifest(exports) {
   fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2)+'\n')
 }
 function config(valueRead = false, metadata = false) {
-  fs.writeFileSync('vitest.config.mjs', `import fs from 'node:fs';
+  fs.writeFileSync('vitest.config.mjs', `import fs, {readFileSync} from 'node:fs';
 import {defineConfig} from 'vitest/config';
 const file='package.json';
 const exists=${metadata ? 'fs.statSync(file).size > 0' : 'true'};
-const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
-const one=exists && ${valueRead ? "pkg.exports?.['./probe'] === './a.js'" : '!!pkg.exports'};
-export default defineConfig({test:{include:one ? ['tests/add.test.js'] : ['tests/*.test.js']}});
+const pkg=JSON.parse(readFileSync('package.json','utf8'));
+${valueRead ? '' : 'const names=Object.keys({...pkg.dependencies,...pkg.devDependencies});'}
+export default defineConfig({test:{include:exists && ${valueRead ? "pkg.exports?.['./probe'] === './a.js'" : "names.includes('vitest')"} ? ['tests/add.test.js'] : ['tests/*.test.js']}});
 `)
 }
 function clean() {fs.rmSync(ledgerRoot, {recursive:true, force:true})}
@@ -54,7 +54,7 @@ try {
   compare(off, 'switch-off')
   manifest(undefined)
   const absent = run('exports-removed')
-  assert.equal(absent.states.length, 2)
+  assert.doesNotMatch(absent.log, /1 recorded files: 1 replay, 0 to run/)
   compare(absent, 'exports-removed')
 
   clean(); manifest({'./probe':'./a.js'}); config(true); warm()
