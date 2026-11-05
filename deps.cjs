@@ -17,7 +17,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const crypto = require('node:crypto')
 
-const VERSION = 'quod-deps-v3'
+const VERSION = 'quod-deps-v4'
 
 // Lifecycle scripts `npm ci` runs for the project's own packages.
 const LIFECYCLE = ['preinstall', 'install', 'postinstall', 'prepublish', 'preprepare', 'prepare', 'postprepare', 'dependencies']
@@ -148,8 +148,8 @@ function key(root, info, facts, env = process.env) {
   }
   add('v', VERSION)
   add('pm', info.pm)
-  add('lock', read(path.join(root, info.lock)))
-  for (const m of manifests(root)) add(`manifest ${m}`, read(path.join(root, m)))
+  add('lock', unversioned(path.join(root, info.lock), info.lock))
+  for (const m of manifests(root)) add(`manifest ${m}`, unversioned(path.join(root, m), m))
   for (const f of ['.npmrc', '.yarnrc', '.yarnrc.yml', 'pnpm-workspace.yaml', '.pnpmfile.cjs', 'bunfig.toml']) add(f, read(path.join(root, f)))
   add('node', facts.node)
   if (info.pm === 'npm') {
@@ -175,6 +175,28 @@ function key(root, info, facts, env = process.env) {
   return h.digest('hex').slice(0, 40)
 }
 
+// A manifest or npm lockfile without the project's own version (and the
+// lockfile's root entry's): a release bump installs the same tree. npm
+// writes that version only into node_modules/.package-lock.json's header,
+// which the shim brings up to date when it answers \`npm ci\` (hook.cjs). Any
+// other file, or one that does not parse, is taken whole.
+function unversioned(p, name) {
+  const raw = read(p)
+  if (raw == null) return null
+  const base = path.basename(name)
+  if (base !== 'package.json' && base !== 'package-lock.json' && base !== 'npm-shrinkwrap.json') return raw
+  let j
+  try {
+    j = JSON.parse(raw.toString('utf8'))
+  } catch {
+    return raw
+  }
+  if (!j || typeof j !== 'object' || Array.isArray(j)) return raw
+  delete j.version
+  if (base !== 'package.json' && j.packages?.['']) delete j.packages[''].version
+  return JSON.stringify(j)
+}
+
 // Whether any dependency's install script may compile against the image.
 function compiles(root, info) {
   const lock = json(path.join(root, info.lock))
@@ -187,13 +209,17 @@ function compiles(root, info) {
   return false
 }
 
+// What tools write into node_modules as they run (caches, vitest's and
+// vite's state, Quod's driver): not the install, never saved or compared.
+const RUNTIME = ['.cache', '.vite', '.vite-temp', '.vitest', '.quod-vitest']
+
 // npm: the node_modules directories to keep (relative to the workspace),
 // and the parts of them that are runtime caches, not the install.
 function npmPaths(ws, root) {
   const rel = path.relative(ws, root)
   const dirs = manifests(root).map((m) => path.posix.dirname(m))
   const paths = [...new Set(dirs)].map((d) => path.posix.join(rel.split(path.sep).join('/') || '.', d, 'node_modules'))
-  return [...paths, '!**/node_modules/.cache', '!**/node_modules/.vite', '!**/node_modules/.quod-vitest']
+  return [...paths, ...RUNTIME.map((d) => `!**/node_modules/${d}`)]
 }
 
 // Why a node_modules installed here must not be saved, or null. The tree
@@ -238,7 +264,7 @@ function npmArgs(args) {
 // after the install is not saved.
 function fullPrint(ws, paths) {
   const h = crypto.createHash('sha256')
-  const skip = new Set(['.cache', '.vite', '.quod-vitest', '.quod-deps.json'])
+  const skip = new Set([...RUNTIME, '.quod-deps.json'])
   const walk = (abs, rel, parentIsNm) => {
     let ents
     try {
@@ -282,7 +308,7 @@ function treePrint(root) {
     return 'none'
   }
   for (const e of top) {
-    if (['.cache', '.vite', '.quod-vitest'].includes(e)) continue
+    if (RUNTIME.includes(e)) continue
     h.update(`${e}\n`)
     if (e.startsWith('@')) {
       try {

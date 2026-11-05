@@ -216,6 +216,19 @@ function npmCi(bin, args) {
     } catch {}
     const same = marker && marker.key === now && JSON.stringify(marker.args) === JSON.stringify(want)
     if (same && D.treePrint(st.root) === st.print) {
+      // The key leaves the project's own version out (a release bump
+      // installs the same tree); npm writes it only into the hidden
+      // lockfile's header, brought up to date here as npm ci would.
+      try {
+        const hidden = path.join(st.root, 'node_modules', '.package-lock.json')
+        const h = JSON.parse(fs.readFileSync(hidden, 'utf8'))
+        const v = JSON.parse(fs.readFileSync(path.join(st.root, 'package.json'), 'utf8')).version
+        if (h.version !== v) {
+          if (v === undefined) delete h.version
+          else h.version = v
+          fs.writeFileSync(hidden, `${JSON.stringify(h, null, 2)}\n`)
+        }
+      } catch {}
       console.log(`quod: node_modules is what \`npm ci\` installs here (restored for this lockfile, package.json files, node ${process.version} and npm ${marker.npm ?? ''}); npm ci skipped`)
       process.exit(0)
     }
