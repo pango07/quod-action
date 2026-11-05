@@ -1,7 +1,12 @@
 # Quod for vitest
 
-Quod makes a Node CI job faster with one line after `actions/setup-node`.
+Quod can accelerate supported Vitest CI jobs with one line after `actions/setup-node`.
 Your install and test commands stay exactly as they are.
+
+This experimental branch adds whole-job and configuration-proof work. Its
+results do not change the published `v2` release. Quod is a GitHub Action
+inside your existing runner; acceleration depends on the workload and replay
+eligibility. Cold recording and confirmation can make a job slower.
 
 - **Tests:** Quod replays the vitest test files whose inputs did not change
   since they last passed, and runs the rest, inside your existing test
@@ -53,27 +58,39 @@ Your repository must be in a Quod team, with the Quod GitHub App installed on
 it. Without `id-token: write`, or when Quod Cloud doesn't answer, the
 GitHub Actions cache carries the ledger. The turbo/Nx remote cache stays off.
 
-Requirements for test replay: vitest 4.x, Node 22.15 or later
+Requirements for test replay on this branch: Vitest 3.2–3.x, 4.x or 5.x, Node 22.15 or later
 (`module.registerHooks`), and a Linux x64 runner. The dependency cache and
 the task cache also run on macOS runners.
 
+The latest complete benchmark tests Node 24.18.0 with Vitest 5.0.0 on
+GitHub-hosted Linux x64, including nine monorepo projects. Compatibility paths
+for other versions are not a promise that every version/configuration has
+been benchmarked. Future Vitest majors and prereleases stay plain until explicitly admitted.
+Watch/browser/UI mode, snapshot updates, sharding, changed-file selection and
+Yarn Plug'n'Play stay plain. Coverage has separate provider/configuration
+guards. This is not a replay promise for Jest, Playwright, Python, Go,
+deployment steps, other CI providers or arbitrary shell commands.
+See the [support and evidence boundary](https://github.com/pango07/quod/blob/exp/boolean-exports-codex/docs/bench/support-boundaries.md).
+
 ## What happens
 
-- **The first run** runs every test file, at about plain vitest speed, and
-  records each one.
+- **The first run** executes the test files and records eligible work.
+  Recording overhead depends on the workload; traced first witnesses can
+  cost substantially more than a plain run.
 - **A record replays only after a second run agrees with it** (the second
   witness). A record is provisional until another run of the same inputs
   produces the same per-test results: the same file contents, packages,
   environment and vitest arguments. A run that disagrees quarantines the
   file until it proves itself again. So a file runs twice after it changes:
   on the commit that changed it, and once more on the next run.
-- **Quod never turns a green job red.** Recording instruments the tests,
+- **Recording failures are checked without instrumentation.** Recording instruments the tests,
   which can slow a timing-sensitive test into a failure. When a file fails
   while recording, Quod runs the failed files again without recording, and
   that run's result, output and exit code are the job's. A file that failed
   is never recorded.
-- **Always runs:** a test file that failed, started a child process, used
-  the network, or wrote into the repository.
+- **Always runs:** failed or quarantined files and work the recorder marks
+  unobservable. Network, child processes and filesystem effects have separate
+  recording restrictions; their presence is not a blanket replay guarantee.
 - **Coverage** (`--coverage`, or `coverage.enabled` in the config, v8 or
   istanbul): each recorded file keeps its coverage; a replayed file's joins
   the files that ran, and vitest's own provider writes every report and

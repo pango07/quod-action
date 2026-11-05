@@ -54,17 +54,19 @@
 
   // What quod cannot record runs as plain vitest, untouched (no quod process
   // at all): yarn Plug'n'Play (vitest and the dependencies in zip archives),
-  // and vitest before 3.2 (what quod's recorder and replay use). The shadow
+  // and vitest outside the implemented 3.2/4/5 compatibility paths. Future
+  // major versions must pass their own gate before interception. The shadow
   // job runs vitest only to record, so there it does not run at all.
   let version = ''
   try {
     version = JSON.parse(fs.readFileSync(path.join(path.dirname(entry), 'package.json'), 'utf8')).version ?? ''
   } catch {}
-  const [major, minor] = version.split('.').map(Number)
+  const release = /^(\d+)\.(\d+)\.(\d+)(?:\+[0-9A-Za-z.-]+)?$/.exec(version)
+  const major = Number(release?.[1]), minor = Number(release?.[2])
   const no = process.versions.pnp
     ? "yarn Plug'n'Play is not supported yet"
-    : !(major > 3 || (major === 3 && minor >= 2))
-      ? `vitest ${version || '(unknown version)'} is not supported (3.2 or later)`
+    : !((major === 3 && minor >= 2) || major === 4 || major === 5)
+      ? `vitest ${version || '(unknown version)'} is not supported (3.2.x–3.x, 4.x or 5.x)`
       : ''
   if (no) {
     if (cfg.mode === 'shadow') {

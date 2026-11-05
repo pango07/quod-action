@@ -1,12 +1,12 @@
 name: Quod
 description: >
-  Makes your Node CI job faster without changing it: one line after
-  setup-node. Restores your dependencies before your install step (npm ci
+  Accelerates supported Vitest jobs with one line after setup-node.
+  Restores your dependencies before your install step (npm ci
   finds node_modules in place), points turbo's and Nx's remote cache at Quod
   Cloud, and replays the vitest test files whose inputs did not change. The
   job records as it runs: a record replays once a second run agrees with it,
-  and files that fail only while recording run again plain, so Quod never
-  turns a green job red. No second job.
+  and files that fail while recording run again plain. Unsupported modes
+  execute normally. Savings depend on the workload. No second job.
 author: pango07
 branding:
   icon: fast-forward
@@ -33,7 +33,7 @@ inputs:
       ships with this action (dist/quod/), so a job fetches nothing; another
       is downloaded.
     required: false
-    default: bin-b9e34fc
+    default: bin-ba0f05a
   sha256:
     description: SHA-256 of that release's quod-linux-x86_64.tar.gz (required when version is set)
     required: false
