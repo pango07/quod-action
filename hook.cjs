@@ -16,7 +16,11 @@
   const env = process.env
   if (env.QUOD_SHIM_ACTIVE === '1' || env.QUOD_DISABLE === '1') return
   const bin = argv[1]
-  if (bin && /npm(-cli\.js)?$/.test(bin)) return npmCi(bin, argv.slice(2))
+  if (bin && /npm(-cli\.js)?$/.test(bin)) {
+    const a = argv.slice(2)
+    if (['run', 'run-script', 'rum', 'urn'].includes(a[0])) return npmUnit(bin, a)
+    return npmCi(bin, a)
+  }
   if (bin && /yarn/.test(bin)) return yarnNode(bin)
   if (!bin || !/vitest(\.m?js)?$/.test(bin)) return
   const fs = require('node:fs')
@@ -254,4 +258,78 @@ function npmCi(bin, args) {
       fs.writeFileSync(record, JSON.stringify({ key: now, args: want, print: D.fullPrint(st.ws, st.paths) }))
     } catch {}
   })
+}
+
+// `npm run <script>` whose script (with its pre/post scripts and the
+// scripts it runs with `npm run`) runs no vitest: a unit (quod unit,
+// docs/through-the-wall.md B1). Quod answers it from its record when every
+// input it read is unchanged (output printed, files restored, exit code),
+// else runs it: traced in a sandbox the first time, plain the second, to
+// record it. vitest has its own recorder, so a script that runs vitest stays
+// npm's, and the vitest in it goes through the shim as always.
+// QUOD_UNITS=0 turns units off.
+function npmUnit(bin, args) {
+  const env = process.env
+  if (env.QUOD_UNITS === '0') return
+  const fs = require('node:fs')
+  const path = require('node:path')
+  let entry
+  try {
+    entry = fs.realpathSync(bin)
+  } catch {
+    return
+  }
+  if (!entry.endsWith(`${path.sep}npm${path.sep}bin${path.sep}npm-cli.js`)) return
+  // Only `npm run <script> [-- args]`: no workspaces, no flags.
+  const script = args[1]
+  if (!script || script.startsWith('-')) return
+  if (args.length > 2 && args[2] !== '--') return
+  let cfg
+  try {
+    cfg = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'))
+  } catch {
+    return
+  }
+  if (cfg.mode === 'shadow' || !cfg.root || !fs.existsSync(cfg.quod)) return
+  const cwd = process.cwd()
+  const root = cfg.root
+  if (cwd !== root && !cwd.startsWith(`${root}${path.sep}`)) return
+  // npm's prefix: the nearest package.json up from here.
+  let dir = cwd
+  while (!fs.existsSync(path.join(dir, 'package.json'))) {
+    const up = path.dirname(dir)
+    if (up === dir) return
+    dir = up
+  }
+  let scripts
+  try {
+    scripts = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).scripts ?? {}
+  } catch {
+    return
+  }
+  if (typeof scripts[script] !== 'string') return
+  const seen = new Set()
+  const todo = [script]
+  while (todo.length) {
+    const s = todo.pop()
+    for (const n of [s, `pre${s}`, `post${s}`]) {
+      if (seen.has(n) || typeof scripts[n] !== 'string') continue
+      seen.add(n)
+      const text = scripts[n]
+      if (/\bvitest\b/.test(text)) return
+      for (const m of text.matchAll(/\bnpm\s+(?:run(?:-script)?\s+|test\b|t\b)([^\s&|;]*)/g)) todo.push(m[1] || 'test')
+    }
+  }
+  const q = ['unit', '--dir', path.join(cfg.ledgers, 'units'), '--root', root, '--mark', path.join(__dirname, 'recorded')]
+  if (!cfg.record) q.push('--no-record')
+  q.push('--', process.execPath, entry, ...args)
+  const r = require('node:child_process').spawnSync(cfg.quod, q, {
+    stdio: 'inherit',
+    env: { ...env, QUOD_SHIM_ACTIVE: '1' },
+  })
+  if (r.error) {
+    console.error(`quod: could not start (${r.error.message}); npm runs the script itself`)
+    return
+  }
+  process.exit(r.status ?? 1)
 }
