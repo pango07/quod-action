@@ -8,6 +8,10 @@ results do not change the published `v2` release. Quod is a GitHub Action
 inside your existing runner; acceleration depends on the workload and replay
 eligibility. Cold recording and confirmation can make a job slower.
 
+The bundled experimental engine now includes the
+[metadata-only replay correction](https://github.com/pango07/quod/blob/exp/boolean-exports-codex/docs/bench/stat-metadata-regression.md).
+Its performance must be remeasured; earlier benchmark savings used an older engine.
+
 - **Tests:** Quod replays the vitest test files whose inputs did not change
   since they last passed, and runs the rest, inside your existing test
   command. The summary, the JSON/JUnit reports and the exit code are what a
@@ -169,7 +173,7 @@ All inputs are optional.
 | --- | --- | --- |
 | `mode` | `check` | `check`: your test job. It replays what the ledger proves unchanged, then runs and records the rest. `shadow`: the older separate recording job, used inside `.github/workflows/shadow.yml`. It still works, and isn't needed any more. |
 | `record` | `true` | In `check` mode, record in this job. `false` only reads the ledger, for a setup that keeps the shadow job. |
-| `version` | `bin-c6f6ed3` | The quod release to install (a `bin-<sha>` release of pango07/ci-bench). |
+| `version` | `bin-8aec5c5` | The bundled experimental quod binary. Other versions use their pinned release archive. |
 | `sha256` | the pinned checksum | SHA-256 of that release's `quod-linux-x86_64.tar.gz`. Required when `version` is a release the action doesn't know. |
 | `cloud` | `true` | Keep the ledger in Quod Cloud when this quod supports it and the job has `id-token: write`. `false` keeps it in the Actions cache. |
 | `dependencies` | `true` | Restore and save what your install puts down: `node_modules` for npm, the store for pnpm, yarn and bun. `false` leaves your install alone. |
