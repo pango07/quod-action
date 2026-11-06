@@ -173,7 +173,7 @@ All inputs are optional.
 | --- | --- | --- |
 | `mode` | `check` | `check`: your test job. It replays what the ledger proves unchanged, then runs and records the rest. `shadow`: the older separate recording job, used inside `.github/workflows/shadow.yml`. It still works, and isn't needed any more. |
 | `record` | `true` | In `check` mode, record in this job. `false` only reads the ledger, for a setup that keeps the shadow job. |
-| `version` | `bin-8aec5c5` | The bundled experimental quod binary. Other versions use their pinned release archive. |
+| `version` | `bin-15cb5ab` | The bundled experimental quod binary. Other versions use their pinned release archive. |
 | `sha256` | the pinned checksum | SHA-256 of that release's `quod-linux-x86_64.tar.gz`. Required when `version` is a release the action doesn't know. |
 | `cloud` | `true` | Keep the ledger in Quod Cloud when this quod supports it and the job has `id-token: write`. `false` keeps it in the Actions cache. |
 | `dependencies` | `true` | Restore and save what your install puts down: `node_modules` for npm, the store for pnpm, yarn and bun. `false` leaves your install alone. |

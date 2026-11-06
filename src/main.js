@@ -22,6 +22,7 @@ const D = require('../deps.cjs')
 
 // SHA-256 of each release's quod-linux-x86_64.tar.gz.
 const PINS = {
+  'bin-15cb5ab': 'eb75a5194e2cb97c443597299327b26bfe288b31730ff412b48237719d7d6db6',
   'bin-8aec5c5': '5af462b810d880c78af7b2619b885d34405b6b8c9eb8ad662615ff02690fc76c',
   'bin-ae52750': '9cbb48d36f41f79ee9d3470285c803dddba7651e3992f39687aa6838869bb41a',
   'bin-b9e34fc': 'caca43ddfeefd7bf05f771865ac69ac1b80a4bfad03bca7f667fa775400c2ac4',
