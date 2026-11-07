@@ -24,7 +24,8 @@ function fixture(t, extra = {}) {
   const calls = [], messages = []
   function invoke({ fast = false, code = 0, value = 'record', error = false } = {}) {
     let exited
-    vm.runInNewContext(hook, { __dirname: base, console: { error: m => messages.push(m) },
+    const stopped = {}
+    try { vm.runInNewContext(hook, { __dirname: base, console: { error: m => messages.push(m) },
       require: n => n === 'node:child_process' ? { spawnSync: (command, args, options) => {
         calls.push({ command, args: Array.from(args), options })
         if (error) return { error: new Error('spawn failed') }
@@ -37,7 +38,8 @@ function fixture(t, extra = {}) {
         return { status: code }
       } } : require(n),
       process: { argv: [process.execPath, bin, 'run'], env: { CI: '1' }, versions: {}, cwd: () => root,
-        exit: code => { exited = code } } })
+        exit: code => { exited = code; throw stopped } } })
+    } catch (e) { if (e !== stopped) throw e }
     return exited
   }
   return { base, cfg, calls, messages, invoke }
