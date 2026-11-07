@@ -258,7 +258,7 @@ function npmCi(bin, args) {
   let now
   try {
     const npm = JSON.parse(fs.readFileSync(path.join(path.dirname(entry), '..', 'package.json'), 'utf8')).version
-    now = D.key(st.root, st.info, { node: process.version, npm, bin: process.execPath })
+    now = D.key(st.root, st.info, { node: process.version, npm, bin: process.execPath }, process.env, st.installProfile)
   } catch {
     return
   }

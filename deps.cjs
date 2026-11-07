@@ -16,6 +16,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const crypto = require('node:crypto')
+const installProfile = require('./npm-install-profile.cjs')
 
 const VERSION = 'quod-deps-v4'
 
@@ -139,7 +140,7 @@ function npmVersion(nodeBin) {
 
 // The key: everything the install reads that can change what it puts on
 // disk. `facts`: { node, npm } (versions).
-function key(root, info, facts, env = process.env) {
+function key(root, info, facts, env = process.env, requestedProfile = null) {
   const h = crypto.createHash('sha256')
   const add = (label, v) => {
     h.update(`${label}\0`)
@@ -147,9 +148,13 @@ function key(root, info, facts, env = process.env) {
     h.update('\0')
   }
   add('v', VERSION)
+  const names = manifests(root)
+  const profile = installProfile.project(root, info, requestedProfile, names)
+  if (profile) add('install-profile', profile.id)
   add('pm', info.pm)
   add('lock', unversioned(path.join(root, info.lock), info.lock))
-  for (const m of manifests(root)) add(`manifest ${m}`, unversioned(path.join(root, m), m))
+  if (profile) add('manifest package.json', profile.manifest)
+  else for (const m of names) add(`manifest ${m}`, unversioned(path.join(root, m), m))
   for (const f of ['.npmrc', '.yarnrc', '.yarnrc.yml', 'pnpm-workspace.yaml', '.pnpmfile.cjs', 'bunfig.toml']) add(f, read(path.join(root, f)))
   add('node', facts.node)
   if (info.pm === 'npm') {
@@ -215,9 +220,11 @@ const RUNTIME = ['.cache', '.vite', '.vite-temp', '.vitest', '.quod-vitest']
 
 // npm: the node_modules directories to keep (relative to the workspace),
 // and the parts of them that are runtime caches, not the install.
-function npmPaths(ws, root) {
+function npmPaths(ws, root, requestedProfile = null) {
   const rel = path.relative(ws, root)
-  const dirs = manifests(root).map((m) => path.posix.dirname(m))
+  const names = manifests(root)
+  const profile = installProfile.project(root, {pm: 'npm', lock: 'package-lock.json'}, requestedProfile, names)
+  const dirs = (profile ? ['package.json'] : names).map((m) => path.posix.dirname(m))
   const paths = [...new Set(dirs)].map((d) => path.posix.join(rel.split(path.sep).join('/') || '.', d, 'node_modules'))
   return [...paths, ...RUNTIME.map((d) => `!**/node_modules/${d}`)]
 }
@@ -321,4 +328,9 @@ function treePrint(root) {
 
 const NPM_CI = ['ci', 'clean-install', 'ic', 'install-clean', 'isntall-clean']
 
-module.exports = { VERSION, detect, findRoot, manifests, npmVersion, key, npmPaths, npmUnsafe, npmArgs, treePrint, fullPrint, NPM_CI }
+function selectInstallProfile(root, info, managedMode) {
+  if (!['v0', 'control'].includes(managedMode)) return null
+  return installProfile.select(root, info, managedMode, manifests(root))
+}
+
+module.exports = { VERSION, detect, findRoot, manifests, npmVersion, key, npmPaths, npmUnsafe, npmArgs, treePrint, fullPrint, NPM_CI, selectInstallProfile }

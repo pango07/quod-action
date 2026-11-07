@@ -133,12 +133,19 @@ async function dependencies(facts) {
   }
   const info = D.detect(root)
   const t0 = Date.now()
-  const key = D.key(root, info, facts)
+  const managedMode = core.getInput('managed-vitest') || 'off'
+  const installProfile = ['v0', 'control'].includes(managedMode) && (core.getInput('mode') || 'check') === 'check' && process.platform === 'linux' && process.arch === 'x64'
+    ? D.selectInstallProfile(root, info, managedMode) : null
+  const key = D.key(root, info, facts, process.env, installProfile)
   const os = `${process.platform}-${process.arch}`
   const namespace = cacheNamespace()
   const st = { ws, root: fs.realpathSync(root), info, pm: info.pm, key, facts: { node: facts.node, npm: facts.npm }, hit: '', save: maySave() }
+  if (installProfile) {
+    st.installProfile = installProfile
+    core.info(`Quod dependencies: reviewed npm install profile ${installProfile}; build and test inputs remain independently checked`)
+  }
   if (info.pm === 'npm') {
-    st.paths = D.npmPaths(ws, root)
+    st.paths = D.npmPaths(ws, root, installProfile)
     st.cacheKey = `quod-deps-${namespace}npm-${os}-${key}`
     if (fs.existsSync(path.join(root, 'node_modules'))) {
       // Something else put node_modules there (another cache step): Quod
@@ -313,6 +320,7 @@ async function run() {
   // variables from its tasks, but every runner keeps PATH.
   fs.copyFileSync(path.join(__dirname, '..', '..', 'hook.cjs'), paths.hook)
   fs.copyFileSync(path.join(__dirname, '..', '..', 'deps.cjs'), path.join(paths.base, 'deps.cjs'))
+  fs.copyFileSync(path.join(__dirname, '..', '..', 'npm-install-profile.cjs'), path.join(paths.base, 'npm-install-profile.cjs'))
   if (deps) fs.writeFileSync(path.join(paths.base, 'deps.json'), JSON.stringify(deps))
   const bin = path.join(paths.base, 'bin')
   fs.mkdirSync(bin, { recursive: true })
