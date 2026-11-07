@@ -134,10 +134,11 @@ async function dependencies(facts) {
   const t0 = Date.now()
   const key = D.key(root, info, facts)
   const os = `${process.platform}-${process.arch}`
+  const namespace = cacheNamespace()
   const st = { ws, root: fs.realpathSync(root), info, pm: info.pm, key, facts: { node: facts.node, npm: facts.npm }, hit: '', save: maySave() }
   if (info.pm === 'npm') {
     st.paths = D.npmPaths(ws, root)
-    st.cacheKey = `quod-deps-npm-${os}-${key}`
+    st.cacheKey = `quod-deps-${namespace}npm-${os}-${key}`
     if (fs.existsSync(path.join(root, 'node_modules'))) {
       // Something else put node_modules there (another cache step): Quod
       // leaves it and its install alone.
@@ -158,8 +159,8 @@ async function dependencies(facts) {
         const npmCache = path.join(home(), '.npm', '_cacache')
         if (!fs.existsSync(npmCache)) {
           const lockHash = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, info.lock))).digest('hex').slice(0, 40)
-          st.npmCache = { path: npmCache, key: `quod-npmcache-${os}-${lockHash}` }
-          const h2 = await cache.restoreCache([npmCache], st.npmCache.key, [`quod-npmcache-${os}-`])
+          st.npmCache = { path: npmCache, key: `quod-npmcache-${namespace}${os}-${lockHash}` }
+          const h2 = await cache.restoreCache([npmCache], st.npmCache.key, [`quod-npmcache-${namespace}${os}-`])
           st.npmCache.hit = h2 === st.npmCache.key ? 'exact' : h2 ? 'prefix' : ''
           if (h2) core.info(`Quod dependencies: npm's download cache restored (${h2 === st.npmCache.key ? 'this lockfile' : 'an earlier lockfile'})`)
         }
@@ -188,7 +189,7 @@ async function dependencies(facts) {
       dir = path.join(process.env.BUN_INSTALL || path.join(home(), '.bun'), 'install', 'cache')
     }
     st.paths = [dir]
-    st.cacheKey = `quod-deps-${info.pm}-${os}-${key}`
+    st.cacheKey = `quod-deps-${namespace}${info.pm}-${os}-${key}`
     let filled = false
     try {
       filled = fs.readdirSync(dir).length > 0
@@ -197,7 +198,7 @@ async function dependencies(facts) {
       st.hit = 'preexisting'
       core.info(`Quod dependencies: ${dir} is already filled (another step restored it); left as it is`)
     } else {
-      const hit = await cache.restoreCache(st.paths.slice(), st.cacheKey, [`quod-deps-${info.pm}-${os}-`])
+      const hit = await cache.restoreCache(st.paths.slice(), st.cacheKey, [`quod-deps-${namespace}${info.pm}-${os}-`])
       st.hit = hit === st.cacheKey ? 'exact' : hit ? 'prefix' : ''
       core.info(hit ? `Quod dependencies: ${info.pm}'s store restored (${st.hit === 'exact' ? 'this lockfile' : 'an earlier lockfile'}) in ${((Date.now() - t0) / 1000).toFixed(1)} s` : `Quod dependencies: no ${info.pm} store saved yet; saved after the job`)
     }
@@ -334,6 +335,18 @@ async function vitest(mode) {
     return false
   }
   const s = scope()
+  const managedMode = core.getInput('managed-vitest') || 'off'
+  if (!['off', 'v0', 'control'].includes(managedMode)) throw new Error('managed-vitest must be off, v0, or control')
+  const managed = managedMode === 'off' ? null : installManaged(mode, managedMode)
+  if (managed) {
+    // Managed receipts have their own transport and supervisor. The ordinary
+    // Quod binary/Cloud ledger do not participate in this explicit profile.
+    core.saveState('record', '')
+    fs.mkdirSync(paths.reports, {recursive: true})
+    fs.writeFileSync(paths.config, JSON.stringify({quod: null, mode, record: false,
+      reports: paths.reports, root: process.env.GITHUB_WORKSPACE, managed}), {mode: 0o600})
+    return true
+  }
   if (mode === 'shadow' && !s.trusted) {
     // A fork's code must not write a ledger every branch reads.
     core.notice('Quod: not recording a fork pull request (its code is not trusted to write the ledger)')
@@ -470,10 +483,46 @@ async function vitest(mode) {
   }
   fs.writeFileSync(
     paths.config,
-    JSON.stringify({ quod, mode, record, ledgers: paths.ledgers, reports: paths.reports, root: process.env.GITHUB_WORKSPACE, cloud, prefetch, deferCloudSave: true }),
+    JSON.stringify({ quod, mode, record, ledgers: paths.ledgers, reports: paths.reports, root: process.env.GITHUB_WORKSPACE, cloud, prefetch, deferCloudSave: true, managed }),
     { mode: 0o600 },
   )
   return true
+}
+
+// The Linux runtime is built on GitHub and shipped under a content pin. No
+// project install script or network fetch participates in this installation.
+function installManaged(mode, managedMode) {
+  if (mode !== 'check') throw new Error('managed-vitest requires check mode')
+  const epoch = Number(core.getInput('managed-epoch'))
+  const seed = Number(core.getInput('managed-seed'))
+  if (!Number.isSafeInteger(epoch) || epoch < 0 || !Number.isSafeInteger(seed) || seed < 0 || seed > 0xffffffff) {
+    throw new Error('managed epoch/seed must be finite nonnegative integers (seed at most 2^32-1)')
+  }
+  const env = JSON.parse(core.getInput('managed-env'))
+  if (!env || typeof env !== 'object' || Array.isArray(env) || Object.values(env).some(v => typeof v !== 'string')) {
+    throw new Error('managed-env must be a JSON string map')
+  }
+  const dist = path.resolve(path.dirname(process.argv[1]), '..')
+  const manifest = JSON.parse(fs.readFileSync(path.join(dist, 'managed', 'manifest.json')))
+  const archive = fs.readFileSync(path.join(dist, 'managed', 'runtime.tar.gz'))
+  if (!/^[a-f0-9]{64}$/.test(manifest.sha256) || crypto.createHash('sha256').update(archive).digest('hex') !== manifest.sha256) {
+    throw new Error('shipped managed runtime byte digest mismatch')
+  }
+  const runtime = path.join(paths.base, 'managed-runtime')
+  fs.rmSync(runtime, {recursive: true, force: true})
+  fs.mkdirSync(runtime, {recursive: true})
+  execFileSync('tar', ['-xzf', path.join(dist, 'managed', 'runtime.tar.gz'), '-C', runtime])
+  const bridge = path.join(dist, 'managed-bridge', 'index.js')
+  if (!fs.existsSync(bridge) || !fs.existsSync(path.join(runtime, 'dispatcher.mjs'))) throw new Error('managed runtime incomplete')
+  core.info(`Quod managed Vitest ${managedMode}: epoch ${epoch}, seed ${seed}, explicit environment keys ${Object.keys(env).sort().join(', ')}; unsupported work runs ordinary Vitest`)
+  return {mode: managedMode, runtime, bridge, epoch, seed, env,
+    write: maySave() && core.getInput('record') !== 'false', namespace: cacheNamespace(), source: manifest.source}
+}
+
+function cacheNamespace() {
+  const value = core.getInput('cache-namespace')
+  if (value && !/^[A-Za-z0-9._-]{1,80}$/.test(value)) throw new Error('cache-namespace must contain at most 80 letters, digits, dots, underscores or hyphens')
+  return value ? value + '-' : ''
 }
 
 run()

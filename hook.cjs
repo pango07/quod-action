@@ -50,7 +50,6 @@
   } catch {
     return
   }
-  if (!fs.existsSync(cfg.quod)) return
 
   // What quod cannot record runs as plain vitest, untouched (no quod process
   // at all): yarn Plug'n'Play (vitest and the dependencies in zip archives),
@@ -76,6 +75,22 @@
     console.error(`quod: ${no}; running plain vitest`)
     return
   }
+
+  if (cfg.managed && cfg.mode === 'check') {
+    // This first profile resolves the repository-root invocation only. A
+    // package-local Vitest command keeps its original cwd and native selection.
+    if (fs.realpathSync(process.cwd()) !== fs.realpathSync(cfg.root)) return
+    const child = require('node:child_process').spawnSync(process.execPath,
+      [cfg.managed.bridge, path.join(__dirname, 'config.json'), entry, ...argv.slice(2)],
+      {stdio: 'inherit', env: {...env, QUOD_SHIM_ACTIVE: '1'}})
+    if (child.error) {
+      console.error(`quod managed: could not start (${child.error.message}); running ordinary Vitest`)
+      return
+    }
+    process.exit(child.status ?? 1)
+  }
+
+  if (!fs.existsSync(cfg.quod)) return
 
   // One ledger per package and command line: where it runs (from the
   // repository root) and its arguments.

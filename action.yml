@@ -12,6 +12,30 @@ branding:
   icon: fast-forward
   color: purple
 inputs:
+  managed-vitest:
+    description: >
+      off (default), v0, or control. v0 explicitly opts supported Vitest files
+      into Quod's managed clock, random seed, environment and capability policy.
+      Unsupported files run ordinary Vitest. control uses the same managed
+      execution without receipt reads or writes. Experimental; Linux x64 only.
+    required: false
+    default: 'off'
+  managed-epoch:
+    description: Managed epoch in milliseconds; part of every receipt key.
+    required: false
+    default: '1700000000000'
+  managed-seed:
+    description: Managed random seed; part of every receipt key.
+    required: false
+    default: '42'
+  managed-env:
+    description: Explicit JSON string map exposed to managed tests; part of every receipt key.
+    required: false
+    default: '{"NODE_ENV":"test"}'
+  cache-namespace:
+    description: Optional isolated cache namespace, for example for a genuinely cold benchmark.
+    required: false
+    default: ''
   mode:
     description: >
       check (default): your CI job. Every `vitest run` replays what the

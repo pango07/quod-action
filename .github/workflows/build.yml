@@ -1,27 +1,50 @@
-# Builds dist/ (the bundled action) on GitHub, so nothing is built on a
-# developer's machine, and commits it when it changed. Then a test of the
-# action itself on a small vitest project.
+# The experimental Action and Linux runtime are built only on GitHub runners.
 name: build
 on:
-  push:
-    branches: [main]
-    paths-ignore: ['dist/**']
   workflow_dispatch:
 permissions:
   contents: write
 jobs:
   build:
+    if: startsWith(github.ref, 'refs/heads/exp/')
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: 24
-      - run: npm install --no-audit --no-fund
-      - run: npm run build
-      - name: Commit dist
+          node-version: '24.18.0'
+      - id: source
+        name: Read pinned managed source
+        run: |
+          node -e 'const s=require("./managed-source.json");if(s.repository!=="pango07/quod"||!/^[a-f0-9]{40}$/.test(s.commit))throw Error("invalid source pin");require("fs").appendFileSync(process.env.GITHUB_OUTPUT,"sha="+s.commit+"\n")'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: pango07/quod
+          ref: ${{ steps.source.outputs.sha }}
+          path: .build/source
+          persist-credentials: false
+      - name: Install Action dependencies and build bundles
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Install pinned managed dependencies
+        working-directory: .build/source/scripts/bench-vitest/managed
+        run: npm ci --no-audit --no-fund
+      - name: Package the managed runtime
+        run: |
+          mkdir -p .build/runtime dist/managed
+          cp .build/source/scripts/bench-vitest/managed/*.mjs .build/runtime/
+          cp .build/source/scripts/bench-vitest/managed/package*.json .build/runtime/
+          cp -a .build/source/scripts/bench-vitest/managed/node_modules .build/runtime/
+          test -f .build/runtime/dispatcher.mjs
+          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -C .build/runtime -czf dist/managed/runtime.tar.gz .
+          node -e 'const fs=require("fs"),c=require("crypto");fs.writeFileSync("dist/managed/manifest.json",JSON.stringify({schema:"quod-managed-action-runtime-v1",source:require("./managed-source.json"),sha256:c.createHash("sha256").update(fs.readFileSync("dist/managed/runtime.tar.gz")).digest("hex")},null,2)+"\n")'
+      - name: Action regression checks
+        run: node --test src/*.test.js test/*-proof.mjs test/*-descriptor.mjs test/realpath.mjs test/recorder-upgrade.mjs test/lineage-cohort.mjs test/cloud-post.mjs
+      - name: Commit reviewed-branch build output
         run: |
           git add -f dist
-          if git diff --cached --quiet; then echo "dist unchanged"; exit 0; fi
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "dist: build of ${GITHUB_SHA::7}"
-          git push
+          if git diff --cached --quiet; then exit 0; fi
+          git -c user.name="OpenAI Codex" -c user.email="juliovaught@yahoo.com" commit -m "Build optional managed Vitest Action at ${GITHUB_SHA::7}" -m "Co-Authored-By: OpenAI Codex <noreply@openai.com>"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

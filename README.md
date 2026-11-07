@@ -192,3 +192,31 @@ All inputs are optional.
 | `token` | `${{ github.token }}` | Reads a triggering CI run's report artifact (a `workflow_run` shadow). |
 
 More: [quodci.com/docs](https://www.quodci.com/docs).
+
+## Experimental managed Vitest
+
+On the experimental branch, opt in with `managed-vitest: v0`. This changes the
+semantics of supported files: a declared epoch (default `1700000000000`), seed
+(`42`), UTC and explicit environment (`{"NODE_ENV":"test"}`), with no native
+network or filesystem access. `managed-vitest: control` runs the same managed
+work without reading or writing receipts. The default is `off`.
+
+The first profile supports the expensive convex-helpers stream property test
+under its reviewed Vitest 5 configuration. Every original test still runs;
+remaining files and unsupported commands use ordinary Vitest. Preparation,
+compilation and capability checks execute before every receipt lookup. A failed,
+incomplete, unsupported or changed-policy result cannot become a receipt.
+
+Managed receipts use immutable, branch-scoped GitHub Actions cache entries. The
+trusted receipt byte digest comes from the key returned by the authenticated
+cache service, never a manifest inside the downloaded cache. The trust scope is
+the repository's authorized cache-writing workflows; an authorized malicious
+publisher is outside that scope. Fork pull requests do not publish receipts, and
+pull_request_target/workflow_run jobs never publish them. Quod Cloud is not used
+for this experimental receipt transport.
+
+`managed-epoch`, `managed-seed` and `managed-env` declare the keyed values.
+`cache-namespace` isolates both dependency and receipt storage for a cold run.
+The shipped Linux x64 runtime is built on GitHub from `managed-source.json` and
+its archive digest is verified before extraction. See the pinned source's
+managed runtime contract and benchmark evidence before interpreting savings.
