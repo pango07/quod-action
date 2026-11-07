@@ -69,6 +69,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: '24.18.0'
+      - name: Install Action dependencies for the existing source regression suite
+        run: npm install --no-audit --no-fund
       - name: Inventory and normalization regression checks
         run: node --test src/*.test.js test/npm-install-equivalence.test.mjs
       - name: Compare eight real npm-ci tuples and an independent baseline repeat
