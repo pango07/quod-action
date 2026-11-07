@@ -19290,264 +19290,6 @@ module.exports.AbortSignal = AbortSignal
 
 /***/ }),
 
-/***/ 15183:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
-
-"use strict";
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.req = exports.json = exports.toBuffer = void 0;
-const http = __importStar(__nccwpck_require__(58611));
-const https = __importStar(__nccwpck_require__(65692));
-async function toBuffer(stream) {
-    let length = 0;
-    const chunks = [];
-    for await (const chunk of stream) {
-        length += chunk.length;
-        chunks.push(chunk);
-    }
-    return Buffer.concat(chunks, length);
-}
-exports.toBuffer = toBuffer;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function json(stream) {
-    const buf = await toBuffer(stream);
-    const str = buf.toString('utf8');
-    try {
-        return JSON.parse(str);
-    }
-    catch (_err) {
-        const err = _err;
-        err.message += ` (input: ${str})`;
-        throw err;
-    }
-}
-exports.json = json;
-function req(url, opts = {}) {
-    const href = typeof url === 'string' ? url : url.href;
-    const req = (href.startsWith('https:') ? https : http).request(url, opts);
-    const promise = new Promise((resolve, reject) => {
-        req
-            .once('response', resolve)
-            .once('error', reject)
-            .end();
-    });
-    req.then = promise.then.bind(promise);
-    return req;
-}
-exports.req = req;
-//# sourceMappingURL=helpers.js.map
-
-/***/ }),
-
-/***/ 98894:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
-
-"use strict";
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
-var __exportStar = (this && this.__exportStar) || function(m, exports) {
-    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.Agent = void 0;
-const net = __importStar(__nccwpck_require__(69278));
-const http = __importStar(__nccwpck_require__(58611));
-const https_1 = __nccwpck_require__(65692);
-__exportStar(__nccwpck_require__(15183), exports);
-const INTERNAL = Symbol('AgentBaseInternalState');
-class Agent extends http.Agent {
-    constructor(opts) {
-        super(opts);
-        this[INTERNAL] = {};
-    }
-    /**
-     * Determine whether this is an `http` or `https` request.
-     */
-    isSecureEndpoint(options) {
-        if (options) {
-            // First check the `secureEndpoint` property explicitly, since this
-            // means that a parent `Agent` is "passing through" to this instance.
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            if (typeof options.secureEndpoint === 'boolean') {
-                return options.secureEndpoint;
-            }
-            // If no explicit `secure` endpoint, check if `protocol` property is
-            // set. This will usually be the case since using a full string URL
-            // or `URL` instance should be the most common usage.
-            if (typeof options.protocol === 'string') {
-                return options.protocol === 'https:';
-            }
-        }
-        // Finally, if no `protocol` property was set, then fall back to
-        // checking the stack trace of the current call stack, and try to
-        // detect the "https" module.
-        const { stack } = new Error();
-        if (typeof stack !== 'string')
-            return false;
-        return stack
-            .split('\n')
-            .some((l) => l.indexOf('(https.js:') !== -1 ||
-            l.indexOf('node:https:') !== -1);
-    }
-    // In order to support async signatures in `connect()` and Node's native
-    // connection pooling in `http.Agent`, the array of sockets for each origin
-    // has to be updated synchronously. This is so the length of the array is
-    // accurate when `addRequest()` is next called. We achieve this by creating a
-    // fake socket and adding it to `sockets[origin]` and incrementing
-    // `totalSocketCount`.
-    incrementSockets(name) {
-        // If `maxSockets` and `maxTotalSockets` are both Infinity then there is no
-        // need to create a fake socket because Node.js native connection pooling
-        // will never be invoked.
-        if (this.maxSockets === Infinity && this.maxTotalSockets === Infinity) {
-            return null;
-        }
-        // All instances of `sockets` are expected TypeScript errors. The
-        // alternative is to add it as a private property of this class but that
-        // will break TypeScript subclassing.
-        if (!this.sockets[name]) {
-            // @ts-expect-error `sockets` is readonly in `@types/node`
-            this.sockets[name] = [];
-        }
-        const fakeSocket = new net.Socket({ writable: false });
-        this.sockets[name].push(fakeSocket);
-        // @ts-expect-error `totalSocketCount` isn't defined in `@types/node`
-        this.totalSocketCount++;
-        return fakeSocket;
-    }
-    decrementSockets(name, socket) {
-        if (!this.sockets[name] || socket === null) {
-            return;
-        }
-        const sockets = this.sockets[name];
-        const index = sockets.indexOf(socket);
-        if (index !== -1) {
-            sockets.splice(index, 1);
-            // @ts-expect-error  `totalSocketCount` isn't defined in `@types/node`
-            this.totalSocketCount--;
-            if (sockets.length === 0) {
-                // @ts-expect-error `sockets` is readonly in `@types/node`
-                delete this.sockets[name];
-            }
-        }
-    }
-    // In order to properly update the socket pool, we need to call `getName()` on
-    // the core `https.Agent` if it is a secureEndpoint.
-    getName(options) {
-        const secureEndpoint = this.isSecureEndpoint(options);
-        if (secureEndpoint) {
-            // @ts-expect-error `getName()` isn't defined in `@types/node`
-            return https_1.Agent.prototype.getName.call(this, options);
-        }
-        // @ts-expect-error `getName()` isn't defined in `@types/node`
-        return super.getName(options);
-    }
-    createSocket(req, options, cb) {
-        const connectOpts = {
-            ...options,
-            secureEndpoint: this.isSecureEndpoint(options),
-        };
-        const name = this.getName(connectOpts);
-        const fakeSocket = this.incrementSockets(name);
-        Promise.resolve()
-            .then(() => this.connect(req, connectOpts))
-            .then((socket) => {
-            this.decrementSockets(name, fakeSocket);
-            if (socket instanceof http.Agent) {
-                try {
-                    // @ts-expect-error `addRequest()` isn't defined in `@types/node`
-                    return socket.addRequest(req, connectOpts);
-                }
-                catch (err) {
-                    return cb(err);
-                }
-            }
-            this[INTERNAL].currentSocket = socket;
-            // @ts-expect-error `createSocket()` isn't defined in `@types/node`
-            super.createSocket(req, options, cb);
-        }, (err) => {
-            this.decrementSockets(name, fakeSocket);
-            cb(err);
-        });
-    }
-    createConnection() {
-        const socket = this[INTERNAL].currentSocket;
-        this[INTERNAL].currentSocket = undefined;
-        if (!socket) {
-            throw new Error('No socket was returned in the `connect()` function');
-        }
-        return socket;
-    }
-    get defaultPort() {
-        return (this[INTERNAL].defaultPort ??
-            (this.protocol === 'https:' ? 443 : 80));
-    }
-    set defaultPort(v) {
-        if (this[INTERNAL]) {
-            this[INTERNAL].defaultPort = v;
-        }
-    }
-    get protocol() {
-        return (this[INTERNAL].protocol ??
-            (this.isSecureEndpoint() ? 'https:' : 'http:'));
-    }
-    set protocol(v) {
-        if (this[INTERNAL]) {
-            this[INTERNAL].protocol = v;
-        }
-    }
-}
-exports.Agent = Agent;
-//# sourceMappingURL=index.js.map
-
-/***/ }),
-
 /***/ 38816:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -37568,456 +37310,6 @@ var bind = __nccwpck_require__(37564);
 /** @type {import('.')} */
 module.exports = bind.call(call, $hasOwn);
 
-
-/***/ }),
-
-/***/ 81970:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
-
-"use strict";
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.HttpProxyAgent = void 0;
-const net = __importStar(__nccwpck_require__(69278));
-const tls = __importStar(__nccwpck_require__(64756));
-const debug_1 = __importDefault(__nccwpck_require__(2830));
-const events_1 = __nccwpck_require__(24434);
-const agent_base_1 = __nccwpck_require__(98894);
-const url_1 = __nccwpck_require__(87016);
-const debug = (0, debug_1.default)('http-proxy-agent');
-/**
- * The `HttpProxyAgent` implements an HTTP Agent subclass that connects
- * to the specified "HTTP proxy server" in order to proxy HTTP requests.
- */
-class HttpProxyAgent extends agent_base_1.Agent {
-    constructor(proxy, opts) {
-        super(opts);
-        this.proxy = typeof proxy === 'string' ? new url_1.URL(proxy) : proxy;
-        this.proxyHeaders = opts?.headers ?? {};
-        debug('Creating new HttpProxyAgent instance: %o', this.proxy.href);
-        // Trim off the brackets from IPv6 addresses
-        const host = (this.proxy.hostname || this.proxy.host).replace(/^\[|\]$/g, '');
-        const port = this.proxy.port
-            ? parseInt(this.proxy.port, 10)
-            : this.proxy.protocol === 'https:'
-                ? 443
-                : 80;
-        this.connectOpts = {
-            ...(opts ? omit(opts, 'headers') : null),
-            host,
-            port,
-        };
-    }
-    addRequest(req, opts) {
-        req._header = null;
-        this.setRequestProps(req, opts);
-        // @ts-expect-error `addRequest()` isn't defined in `@types/node`
-        super.addRequest(req, opts);
-    }
-    setRequestProps(req, opts) {
-        const { proxy } = this;
-        const protocol = opts.secureEndpoint ? 'https:' : 'http:';
-        const hostname = req.getHeader('host') || 'localhost';
-        const base = `${protocol}//${hostname}`;
-        const url = new url_1.URL(req.path, base);
-        if (opts.port !== 80) {
-            url.port = String(opts.port);
-        }
-        // Change the `http.ClientRequest` instance's "path" field
-        // to the absolute path of the URL that will be requested.
-        req.path = String(url);
-        // Inject the `Proxy-Authorization` header if necessary.
-        const headers = typeof this.proxyHeaders === 'function'
-            ? this.proxyHeaders()
-            : { ...this.proxyHeaders };
-        if (proxy.username || proxy.password) {
-            const auth = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
-            headers['Proxy-Authorization'] = `Basic ${Buffer.from(auth).toString('base64')}`;
-        }
-        if (!headers['Proxy-Connection']) {
-            headers['Proxy-Connection'] = this.keepAlive
-                ? 'Keep-Alive'
-                : 'close';
-        }
-        for (const name of Object.keys(headers)) {
-            const value = headers[name];
-            if (value) {
-                req.setHeader(name, value);
-            }
-        }
-    }
-    async connect(req, opts) {
-        req._header = null;
-        if (!req.path.includes('://')) {
-            this.setRequestProps(req, opts);
-        }
-        // At this point, the http ClientRequest's internal `_header` field
-        // might have already been set. If this is the case then we'll need
-        // to re-generate the string since we just changed the `req.path`.
-        let first;
-        let endOfHeaders;
-        debug('Regenerating stored HTTP header string for request');
-        req._implicitHeader();
-        if (req.outputData && req.outputData.length > 0) {
-            debug('Patching connection write() output buffer with updated header');
-            first = req.outputData[0].data;
-            endOfHeaders = first.indexOf('\r\n\r\n') + 4;
-            req.outputData[0].data =
-                req._header + first.substring(endOfHeaders);
-            debug('Output buffer: %o', req.outputData[0].data);
-        }
-        // Create a socket connection to the proxy server.
-        let socket;
-        if (this.proxy.protocol === 'https:') {
-            debug('Creating `tls.Socket`: %o', this.connectOpts);
-            socket = tls.connect(this.connectOpts);
-        }
-        else {
-            debug('Creating `net.Socket`: %o', this.connectOpts);
-            socket = net.connect(this.connectOpts);
-        }
-        // Wait for the socket's `connect` event, so that this `callback()`
-        // function throws instead of the `http` request machinery. This is
-        // important for i.e. `PacProxyAgent` which determines a failed proxy
-        // connection via the `callback()` function throwing.
-        await (0, events_1.once)(socket, 'connect');
-        return socket;
-    }
-}
-HttpProxyAgent.protocols = ['http', 'https'];
-exports.HttpProxyAgent = HttpProxyAgent;
-function omit(obj, ...keys) {
-    const ret = {};
-    let key;
-    for (key in obj) {
-        if (!keys.includes(key)) {
-            ret[key] = obj[key];
-        }
-    }
-    return ret;
-}
-//# sourceMappingURL=index.js.map
-
-/***/ }),
-
-/***/ 3669:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
-
-"use strict";
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.HttpsProxyAgent = void 0;
-const net = __importStar(__nccwpck_require__(69278));
-const tls = __importStar(__nccwpck_require__(64756));
-const assert_1 = __importDefault(__nccwpck_require__(42613));
-const debug_1 = __importDefault(__nccwpck_require__(2830));
-const agent_base_1 = __nccwpck_require__(98894);
-const url_1 = __nccwpck_require__(87016);
-const parse_proxy_response_1 = __nccwpck_require__(37943);
-const debug = (0, debug_1.default)('https-proxy-agent');
-const setServernameFromNonIpHost = (options) => {
-    if (options.servername === undefined &&
-        options.host &&
-        !net.isIP(options.host)) {
-        return {
-            ...options,
-            servername: options.host,
-        };
-    }
-    return options;
-};
-/**
- * The `HttpsProxyAgent` implements an HTTP Agent subclass that connects to
- * the specified "HTTP(s) proxy server" in order to proxy HTTPS requests.
- *
- * Outgoing HTTP requests are first tunneled through the proxy server using the
- * `CONNECT` HTTP request method to establish a connection to the proxy server,
- * and then the proxy server connects to the destination target and issues the
- * HTTP request from the proxy server.
- *
- * `https:` requests have their socket connection upgraded to TLS once
- * the connection to the proxy server has been established.
- */
-class HttpsProxyAgent extends agent_base_1.Agent {
-    constructor(proxy, opts) {
-        super(opts);
-        this.options = { path: undefined };
-        this.proxy = typeof proxy === 'string' ? new url_1.URL(proxy) : proxy;
-        this.proxyHeaders = opts?.headers ?? {};
-        debug('Creating new HttpsProxyAgent instance: %o', this.proxy.href);
-        // Trim off the brackets from IPv6 addresses
-        const host = (this.proxy.hostname || this.proxy.host).replace(/^\[|\]$/g, '');
-        const port = this.proxy.port
-            ? parseInt(this.proxy.port, 10)
-            : this.proxy.protocol === 'https:'
-                ? 443
-                : 80;
-        this.connectOpts = {
-            // Attempt to negotiate http/1.1 for proxy servers that support http/2
-            ALPNProtocols: ['http/1.1'],
-            ...(opts ? omit(opts, 'headers') : null),
-            host,
-            port,
-        };
-    }
-    /**
-     * Called when the node-core HTTP client library is creating a
-     * new HTTP request.
-     */
-    async connect(req, opts) {
-        const { proxy } = this;
-        if (!opts.host) {
-            throw new TypeError('No "host" provided');
-        }
-        // Create a socket connection to the proxy server.
-        let socket;
-        if (proxy.protocol === 'https:') {
-            debug('Creating `tls.Socket`: %o', this.connectOpts);
-            socket = tls.connect(setServernameFromNonIpHost(this.connectOpts));
-        }
-        else {
-            debug('Creating `net.Socket`: %o', this.connectOpts);
-            socket = net.connect(this.connectOpts);
-        }
-        const headers = typeof this.proxyHeaders === 'function'
-            ? this.proxyHeaders()
-            : { ...this.proxyHeaders };
-        const host = net.isIPv6(opts.host) ? `[${opts.host}]` : opts.host;
-        let payload = `CONNECT ${host}:${opts.port} HTTP/1.1\r\n`;
-        // Inject the `Proxy-Authorization` header if necessary.
-        if (proxy.username || proxy.password) {
-            const auth = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
-            headers['Proxy-Authorization'] = `Basic ${Buffer.from(auth).toString('base64')}`;
-        }
-        headers.Host = `${host}:${opts.port}`;
-        if (!headers['Proxy-Connection']) {
-            headers['Proxy-Connection'] = this.keepAlive
-                ? 'Keep-Alive'
-                : 'close';
-        }
-        for (const name of Object.keys(headers)) {
-            payload += `${name}: ${headers[name]}\r\n`;
-        }
-        const proxyResponsePromise = (0, parse_proxy_response_1.parseProxyResponse)(socket);
-        socket.write(`${payload}\r\n`);
-        const { connect, buffered } = await proxyResponsePromise;
-        req.emit('proxyConnect', connect);
-        this.emit('proxyConnect', connect, req);
-        if (connect.statusCode === 200) {
-            req.once('socket', resume);
-            if (opts.secureEndpoint) {
-                // The proxy is connecting to a TLS server, so upgrade
-                // this socket connection to a TLS connection.
-                debug('Upgrading socket connection to TLS');
-                return tls.connect({
-                    ...omit(setServernameFromNonIpHost(opts), 'host', 'path', 'port'),
-                    socket,
-                });
-            }
-            return socket;
-        }
-        // Some other status code that's not 200... need to re-play the HTTP
-        // header "data" events onto the socket once the HTTP machinery is
-        // attached so that the node core `http` can parse and handle the
-        // error status code.
-        // Close the original socket, and a new "fake" socket is returned
-        // instead, so that the proxy doesn't get the HTTP request
-        // written to it (which may contain `Authorization` headers or other
-        // sensitive data).
-        //
-        // See: https://hackerone.com/reports/541502
-        socket.destroy();
-        const fakeSocket = new net.Socket({ writable: false });
-        fakeSocket.readable = true;
-        // Need to wait for the "socket" event to re-play the "data" events.
-        req.once('socket', (s) => {
-            debug('Replaying proxy buffer for failed request');
-            (0, assert_1.default)(s.listenerCount('data') > 0);
-            // Replay the "buffered" Buffer onto the fake `socket`, since at
-            // this point the HTTP module machinery has been hooked up for
-            // the user.
-            s.push(buffered);
-            s.push(null);
-        });
-        return fakeSocket;
-    }
-}
-HttpsProxyAgent.protocols = ['http', 'https'];
-exports.HttpsProxyAgent = HttpsProxyAgent;
-function resume(socket) {
-    socket.resume();
-}
-function omit(obj, ...keys) {
-    const ret = {};
-    let key;
-    for (key in obj) {
-        if (!keys.includes(key)) {
-            ret[key] = obj[key];
-        }
-    }
-    return ret;
-}
-//# sourceMappingURL=index.js.map
-
-/***/ }),
-
-/***/ 37943:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
-
-"use strict";
-
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.parseProxyResponse = void 0;
-const debug_1 = __importDefault(__nccwpck_require__(2830));
-const debug = (0, debug_1.default)('https-proxy-agent:parse-proxy-response');
-function parseProxyResponse(socket) {
-    return new Promise((resolve, reject) => {
-        // we need to buffer any HTTP traffic that happens with the proxy before we get
-        // the CONNECT response, so that if the response is anything other than an "200"
-        // response code, then we can re-play the "data" events on the socket once the
-        // HTTP parser is hooked up...
-        let buffersLength = 0;
-        const buffers = [];
-        function read() {
-            const b = socket.read();
-            if (b)
-                ondata(b);
-            else
-                socket.once('readable', read);
-        }
-        function cleanup() {
-            socket.removeListener('end', onend);
-            socket.removeListener('error', onerror);
-            socket.removeListener('readable', read);
-        }
-        function onend() {
-            cleanup();
-            debug('onend');
-            reject(new Error('Proxy connection ended before receiving CONNECT response'));
-        }
-        function onerror(err) {
-            cleanup();
-            debug('onerror %o', err);
-            reject(err);
-        }
-        function ondata(b) {
-            buffers.push(b);
-            buffersLength += b.length;
-            const buffered = Buffer.concat(buffers, buffersLength);
-            const endOfHeaders = buffered.indexOf('\r\n\r\n');
-            if (endOfHeaders === -1) {
-                // keep buffering
-                debug('have not received end of HTTP headers yet...');
-                read();
-                return;
-            }
-            const headerParts = buffered
-                .slice(0, endOfHeaders)
-                .toString('ascii')
-                .split('\r\n');
-            const firstLine = headerParts.shift();
-            if (!firstLine) {
-                socket.destroy();
-                return reject(new Error('No header received from proxy CONNECT response'));
-            }
-            const firstLineParts = firstLine.split(' ');
-            const statusCode = +firstLineParts[1];
-            const statusText = firstLineParts.slice(2).join(' ');
-            const headers = {};
-            for (const header of headerParts) {
-                if (!header)
-                    continue;
-                const firstColon = header.indexOf(':');
-                if (firstColon === -1) {
-                    socket.destroy();
-                    return reject(new Error(`Invalid header from proxy CONNECT response: "${header}"`));
-                }
-                const key = header.slice(0, firstColon).toLowerCase();
-                const value = header.slice(firstColon + 1).trimStart();
-                const current = headers[key];
-                if (typeof current === 'string') {
-                    headers[key] = [current, value];
-                }
-                else if (Array.isArray(current)) {
-                    current.push(value);
-                }
-                else {
-                    headers[key] = value;
-                }
-            }
-            debug('got proxy server response: %o %o', firstLine, headers);
-            cleanup();
-            resolve({
-                connect: {
-                    statusCode,
-                    statusText,
-                    headers,
-                },
-                buffered,
-            });
-        }
-        socket.on('error', onerror);
-        socket.on('end', onend);
-        read();
-    });
-}
-exports.parseProxyResponse = parseProxyResponse;
-//# sourceMappingURL=parse-proxy-response.js.map
 
 /***/ }),
 
@@ -93115,7 +92407,12 @@ function serializeDictionaryType(serializer, mapper, object, objectName, isXml, 
     for (const key of Object.keys(object)) {
         const serializedValue = serializer.serialize(valueType, object[key], objectName, options);
         // If the element needs an XML namespace we need to add it within the $ property
-        tempDictionary[key] = getXmlObjectValue(valueType, serializedValue, isXml, options);
+        Object.defineProperty(tempDictionary, key, {
+            value: getXmlObjectValue(valueType, serializedValue, isXml, options),
+            enumerable: true,
+            configurable: true,
+            writable: true,
+        });
     }
     // Add the namespace to the root element if needed
     if (isXml && mapper.xmlNamespace) {
@@ -93314,7 +92611,12 @@ function deserializeCompositeType(serializer, mapper, responseBody, objectName, 
             const dictionary = {};
             for (const headerKey of Object.keys(responseBody)) {
                 if (headerKey.startsWith(headerCollectionPrefix)) {
-                    dictionary[headerKey.substring(headerCollectionPrefix.length)] = serializer.deserialize(propertyMapper.type.value, responseBody[headerKey], propertyObjectName, options);
+                    Object.defineProperty(dictionary, headerKey.substring(headerCollectionPrefix.length), {
+                        value: serializer.deserialize(propertyMapper.type.value, responseBody[headerKey], propertyObjectName, options),
+                        enumerable: true,
+                        configurable: true,
+                        writable: true,
+                    });
                 }
                 handledPropertyNames.push(headerKey);
             }
@@ -93469,7 +92771,12 @@ function deserializeDictionaryType(serializer, mapper, responseBody, objectName,
     if (responseBody) {
         const tempDictionary = {};
         for (const key of Object.keys(responseBody)) {
-            tempDictionary[key] = serializer.deserialize(value, responseBody[key], objectName, options);
+            Object.defineProperty(tempDictionary, key, {
+                value: serializer.deserialize(value, responseBody[key], objectName, options),
+                enumerable: true,
+                configurable: true,
+                writable: true,
+            });
         }
         return tempDictionary;
     }
@@ -136742,21 +136049,11 @@ async function sendRequest(method, url, pipeline, options = {}, customHttpClient
     throw e;
   }
 }
-function getRequestContentType(options = {}) {
-  if (options.contentType) {
-    return options.contentType;
-  }
-  const headerContentType = options.headers?.["content-type"];
-  if (typeof headerContentType === "string") {
-    return headerContentType;
-  }
-  return getContentType(options.body);
-}
 function getContentType(body) {
   if (body === void 0) {
     return void 0;
   }
-  if (ArrayBuffer.isView(body)) {
+  if (body instanceof ArrayBuffer || ArrayBuffer.isView(body)) {
     return "application/octet-stream";
   }
   if ((0, import_typeGuards.isBlob)(body) && body.type) {
@@ -136773,16 +136070,22 @@ function getContentType(body) {
   return "application/json";
 }
 function buildPipelineRequest(method, url, options = {}) {
-  const requestContentType = getRequestContentType(options);
+  const headers = (0, import_httpHeaders.createHttpHeaders)(options.headers);
+  let requestContentType = options.contentType;
+  if (!requestContentType) {
+    requestContentType = headers.get("content-type");
+  }
+  if (requestContentType === void 0) {
+    requestContentType = getContentType(options.body);
+  }
   const { body, multipartBody } = getRequestBody(options.body, requestContentType);
-  const accept = options.accept ?? options.headers?.accept ?? (options.noDefaultAcceptHeader ? void 0 : "application/json");
-  const headers = (0, import_httpHeaders.createHttpHeaders)({
-    ...options.headers ? options.headers : {},
-    ...accept !== void 0 && { accept },
-    ...requestContentType && {
-      "content-type": requestContentType
-    }
-  });
+  const accept = options.accept ?? headers.get("accept") ?? (options.noDefaultAcceptHeader ? void 0 : "application/json");
+  if (accept !== void 0) {
+    headers.set("accept", accept);
+  }
+  if (requestContentType) {
+    headers.set("content-type", requestContentType);
+  }
   const {
     allowInsecureConnection,
     abortSignal,
@@ -136831,10 +136134,8 @@ function getRequestBody(body, contentType = "") {
   if (typeof body === "function") {
     return { body };
   }
-  if (ArrayBuffer.isView(body)) {
-    return {
-      body: body instanceof Uint8Array ? body : JSON.stringify(body)
-    };
+  if (body instanceof ArrayBuffer || ArrayBuffer.isView(body)) {
+    return { body };
   }
   const firstType = contentType.split(";")[0];
   switch (firstType) {
@@ -137142,7 +136443,7 @@ __export(constants_exports, {
   SDK_VERSION: () => SDK_VERSION
 });
 module.exports = __toCommonJS(constants_exports);
-const SDK_VERSION = "0.3.9";
+const SDK_VERSION = "0.3.10";
 const DEFAULT_RETRY_POLICY_COUNT = 3;
 // Annotate the CommonJS export names for ESM import in node:
 0 && (0);
@@ -138013,14 +137314,18 @@ var import_node_http = __toESM(__nccwpck_require__(37067));
 var import_node_https = __toESM(__nccwpck_require__(44708));
 var import_node_zlib = __toESM(__nccwpck_require__(38522));
 var import_node_stream = __nccwpck_require__(57075);
+var import_node_util = __nccwpck_require__(57975);
 var import_AbortError = __nccwpck_require__(99992);
 var import_httpHeaders = __nccwpck_require__(4220);
 var import_restError = __nccwpck_require__(9758);
 var import_log = __nccwpck_require__(3644);
 var import_sanitizer = __nccwpck_require__(7784);
+var import_requestBodyHeaders = __nccwpck_require__(75634);
+var import_nodeExpectContinue = __nccwpck_require__(96463);
+var import_responseBody = __nccwpck_require__(83008);
 const DEFAULT_TLS_SETTINGS = {};
 function isReadableStream(body) {
-  return body && typeof body.pipe === "function";
+  return typeof body === "object" && body !== null && "pipe" in body && typeof body.pipe === "function";
 }
 function isStreamComplete(stream) {
   if (stream.readable === false) {
@@ -138039,7 +137344,13 @@ function isStreamComplete(stream) {
   });
 }
 function isArrayBuffer(body) {
-  return body && typeof body.byteLength === "number";
+  return import_node_util.types.isArrayBuffer(body) || ArrayBuffer.isView(body);
+}
+function arrayBufferToBuffer(body) {
+  if (Buffer.isBuffer(body)) {
+    return body;
+  }
+  return ArrayBuffer.isView(body) ? Buffer.from(body.buffer, body.byteOffset, body.byteLength) : Buffer.from(body);
 }
 class ReportTransform extends import_node_stream.Transform {
   loadedBytes = 0;
@@ -138060,6 +137371,105 @@ class ReportTransform extends import_node_stream.Transform {
     this.progressCallback = progressCallback;
   }
 }
+function createRequestLifecycle(request, options, isInsecure, resolve, reject) {
+  let clientRequest;
+  let response;
+  let requestDone = false;
+  let resolveRequestComplete;
+  const requestComplete = new Promise((_resolve) => {
+    resolveRequestComplete = _resolve;
+  });
+  const onComplete = () => {
+    requestDone = true;
+    clientRequest.removeListener("finish", onComplete);
+    clientRequest.removeListener("close", onComplete);
+    resolveRequestComplete();
+  };
+  const onResponse = (incomingResponse) => {
+    response = incomingResponse;
+    resolve({
+      response: incomingResponse,
+      requestComplete,
+      isRequestComplete: () => requestDone,
+      disposeRequest: () => {
+        if (!requestDone) {
+          clientRequest.destroy();
+        }
+      }
+    });
+  };
+  return {
+    createRequest: (onResponseCallback = onResponse) => {
+      clientRequest = isInsecure ? import_node_http.default.request(options, onResponseCallback) : import_node_https.default.request(options, onResponseCallback);
+      clientRequest.once("finish", onComplete);
+      clientRequest.once("close", onComplete);
+      return clientRequest;
+    },
+    onResponse,
+    rejectRequest: (error) => {
+      reject(toRequestSendError(error, request));
+    },
+    abortRequest: (req) => {
+      const abortError = new import_AbortError.AbortError(
+        "The operation was aborted. Rejecting from abort signal callback while making request."
+      );
+      response?.destroy(abortError);
+      req.destroy(abortError);
+      reject(abortError);
+    }
+  };
+}
+function toRequestSendError(error, request) {
+  if ((0, import_restError.isRestError)(error)) {
+    return error;
+  }
+  const prematureClose = error.code === "ERR_STREAM_PREMATURE_CLOSE";
+  return new import_restError.RestError(
+    prematureClose ? "Request body stream closed before ending" : error.message,
+    {
+      code: prematureClose ? import_restError.RestError.REQUEST_SEND_ERROR : error.code ?? import_restError.RestError.REQUEST_SEND_ERROR,
+      request
+    }
+  );
+}
+function sendRequestBody(clientRequest, body, request, onError) {
+  if (body && isReadableStream(body)) {
+    pipeUploadStream(body, clientRequest, request, onError);
+  } else if (body) {
+    if (typeof body === "string" || Buffer.isBuffer(body)) {
+      clientRequest.end(body);
+    } else {
+      import_log.logger.error("Unrecognized body type", body);
+      throw new import_restError.RestError("Unrecognized body type", { request });
+    }
+  } else {
+    clientRequest.end();
+  }
+}
+function prepareRequestBody(request, useExpectContinue) {
+  const requestBody = request.body;
+  const resolvedBody = typeof requestBody === "function" ? requestBody() : requestBody;
+  const body = resolvedBody && isArrayBuffer(resolvedBody) ? arrayBufferToBuffer(resolvedBody) : resolvedBody;
+  if (!useExpectContinue && body && !request.headers.has("Content-Length")) {
+    const bodyLength = getBodyLength(body);
+    if (bodyLength !== null) {
+      request.headers.set("Content-Length", bodyLength);
+    }
+  }
+  if (!body || !request.onUploadProgress) {
+    return body;
+  }
+  const uploadReportStream = new ReportTransform(request.onUploadProgress);
+  uploadReportStream.on("error", (e) => {
+    import_log.logger.error("Error in upload progress", e);
+  });
+  if (isReadableStream(body)) {
+    pipeUploadStream(body, uploadReportStream, request);
+  } else {
+    uploadReportStream.end(body);
+  }
+  return uploadReportStream;
+}
 class NodeHttpClient {
   cachedHttpAgent;
   cachedHttpsAgents = /* @__PURE__ */ new WeakMap();
@@ -138068,10 +137478,12 @@ class NodeHttpClient {
    * @param request - The request to be made.
    */
   async sendRequest(request) {
+    const requestBody = request.body;
     const abortController = new AbortController();
     let abortListener;
-    if (request.abortSignal) {
-      if (request.abortSignal.aborted) {
+    const requestAbortSignal = request.abortSignal;
+    if (requestAbortSignal) {
+      if (requestAbortSignal.aborted) {
         throw new import_AbortError.AbortError("The operation was aborted. Request has already been canceled.");
       }
       abortListener = (event) => {
@@ -138079,7 +137491,7 @@ class NodeHttpClient {
           abortController.abort();
         }
       };
-      request.abortSignal.addEventListener("abort", abortListener);
+      requestAbortSignal.addEventListener("abort", abortListener);
     }
     let timeoutId;
     if (request.timeout > 0) {
@@ -138091,29 +137503,30 @@ class NodeHttpClient {
     }
     const acceptEncoding = request.headers.get("Accept-Encoding");
     const shouldDecompress = acceptEncoding?.includes("gzip") || acceptEncoding?.includes("deflate");
-    let body = typeof request.body === "function" ? request.body() : request.body;
-    if (body && !request.headers.has("Content-Length")) {
-      const bodyLength = getBodyLength(body);
-      if (bodyLength !== null) {
-        request.headers.set("Content-Length", bodyLength);
-      }
-    }
+    let body;
     let responseStream;
+    let requestComplete = Promise.resolve();
     try {
-      if (body && request.onUploadProgress) {
-        const onUploadProgress = request.onUploadProgress;
-        const uploadReportStream = new ReportTransform(onUploadProgress);
-        uploadReportStream.on("error", (e) => {
-          import_log.logger.error("Error in upload progress", e);
-        });
-        if (isReadableStream(body)) {
-          body.pipe(uploadReportStream);
-        } else {
-          uploadReportStream.end(body);
-        }
-        body = uploadReportStream;
+      let useExpectContinue = (0, import_nodeExpectContinue.hasExpectContinue)(request);
+      const knownBodyLength = useExpectContinue && typeof requestBody !== "function" ? getBodyLength(requestBody ?? null) : null;
+      if (knownBodyLength === 0) {
+        (0, import_requestBodyHeaders.removeExpectContinueHeader)(request);
+        useExpectContinue = false;
       }
-      const res = await this.makeRequest(request, abortController, body);
+      if (!useExpectContinue) {
+        body = prepareRequestBody(request, false);
+      }
+      const result = useExpectContinue ? await this.makeRequestWithExpectContinue(
+        request,
+        abortController,
+        () => {
+          body = prepareRequestBody(request, true);
+          return body;
+        },
+        knownBodyLength
+      ) : await this.makeRequest(request, abortController, body);
+      requestComplete = result.requestComplete;
+      const res = result.response;
       const headers = getResponseHeaders(res);
       const status = res.statusCode ?? 0;
       const response = {
@@ -138121,19 +137534,30 @@ class NodeHttpClient {
         headers,
         request
       };
-      if (request.method === "HEAD") {
+      if (!result.isRequestComplete()) {
+        (0, import_responseBody.setRequestCompletion)(response, result.requestComplete);
+        const clearDisposer = (0, import_responseBody.setResponseBodyDisposer)(response, result.disposeRequest);
+        result.requestComplete.then(clearDisposer).catch((error) => {
+          import_log.logger.warning("Error disposing request", error);
+        });
+      }
+      const method = typeof request.requestOverrides?.method === "string" ? request.requestOverrides.method.toUpperCase() : request.method;
+      if (method === "HEAD") {
         res.resume();
         return response;
       }
-      responseStream = shouldDecompress ? getDecodedResponseStream(res, headers) : res;
+      responseStream = shouldDecompress ? getDecodedResponseStream(res, headers, abortController.signal) : res;
       const onDownloadProgress = request.onDownloadProgress;
       if (onDownloadProgress) {
         const downloadReportStream = new ReportTransform(onDownloadProgress);
         downloadReportStream.on("error", (e) => {
           import_log.logger.error("Error in download progress", e);
         });
-        responseStream.pipe(downloadReportStream);
-        responseStream = downloadReportStream;
+        responseStream = pipeResponseStream(
+          responseStream,
+          downloadReportStream,
+          abortController.signal
+        );
       }
       if (
         // Value of POSITIVE_INFINITY in streamResponseStatusCodes is considered as any status code
@@ -138144,11 +137568,19 @@ class NodeHttpClient {
         response.bodyAsText = await streamToText(responseStream);
       }
       return response;
+    } catch (error) {
+      if (isReadableStream(body)) {
+        (0, import_responseBody.disposeNodeStream)(body);
+      }
+      if (responseStream) {
+        (0, import_responseBody.disposeNodeStream)(responseStream);
+      }
+      throw error;
     } finally {
       if (timeoutId !== void 0) {
         clearTimeout(timeoutId);
       }
-      if (request.abortSignal && abortListener) {
+      if (requestAbortSignal && abortListener) {
         let uploadStreamDone = Promise.resolve();
         if (isReadableStream(body)) {
           uploadStreamDone = isStreamComplete(body);
@@ -138157,9 +137589,9 @@ class NodeHttpClient {
         if (isReadableStream(responseStream)) {
           downloadStreamDone = isStreamComplete(responseStream);
         }
-        Promise.all([uploadStreamDone, downloadStreamDone]).then(() => {
+        Promise.all([requestComplete, uploadStreamDone, downloadStreamDone]).then(() => {
           if (abortListener) {
-            request.abortSignal?.removeEventListener("abort", abortListener);
+            requestAbortSignal.removeEventListener("abort", abortListener);
           }
         }).catch((e) => {
           import_log.logger.warning("Error when cleaning up abortListener on httpRequest", e);
@@ -138168,52 +137600,66 @@ class NodeHttpClient {
     }
   }
   makeRequest(request, abortController, body) {
+    const { options, isInsecure } = this.getRequestOptions(request);
+    return new Promise((resolve, reject) => {
+      const { createRequest, rejectRequest, abortRequest } = createRequestLifecycle(
+        request,
+        options,
+        isInsecure,
+        resolve,
+        reject
+      );
+      const req = createRequest();
+      req.once("error", rejectRequest);
+      abortController.signal.addEventListener("abort", () => abortRequest(req));
+      sendRequestBody(req, body, request, rejectRequest);
+    });
+  }
+  makeRequestWithExpectContinue(request, abortController, prepareBody, knownBodyLength) {
+    const { options, isInsecure } = this.getRequestOptions(request);
+    (0, import_nodeExpectContinue.addExpectContinueFraming)(options, knownBodyLength);
+    return new Promise((resolve, reject) => {
+      const { createRequest, onResponse, rejectRequest, abortRequest } = createRequestLifecycle(
+        request,
+        options,
+        isInsecure,
+        resolve,
+        reject
+      );
+      (0, import_nodeExpectContinue.createExpectContinueRequest)({
+        abortSignal: abortController.signal,
+        bodyStream: isReadableStream(request.body) ? request.body : void 0,
+        createRequest,
+        onAbort: abortRequest,
+        onError: rejectRequest,
+        onBodyError: reject,
+        onResponse,
+        sendBody: (clientRequest) => {
+          const body = prepareBody();
+          sendRequestBody(clientRequest, body, request, rejectRequest);
+        }
+      });
+    });
+  }
+  getRequestOptions(request) {
     const url = new URL(request.url);
     const isInsecure = url.protocol !== "https:";
     if (isInsecure && !request.allowInsecureConnection) {
       throw new Error(`Cannot connect to ${request.url} while allowInsecureConnection is false.`);
     }
     const agent = request.agent ?? this.getOrCreateAgent(request, isInsecure);
-    const options = {
-      agent,
-      hostname: url.hostname,
-      path: `${url.pathname}${url.search}`,
-      port: url.port,
-      method: request.method,
-      headers: request.headers.toJSON({ preserveCase: true }),
-      ...request.requestOverrides
-    };
-    return new Promise((resolve, reject) => {
-      const req = isInsecure ? import_node_http.default.request(options, resolve) : import_node_https.default.request(options, resolve);
-      req.once("error", (err) => {
-        reject(
-          new import_restError.RestError(err.message, { code: err.code ?? import_restError.RestError.REQUEST_SEND_ERROR, request })
-        );
-      });
-      abortController.signal.addEventListener("abort", () => {
-        const abortError = new import_AbortError.AbortError(
-          "The operation was aborted. Rejecting from abort signal callback while making request."
-        );
-        req.destroy(abortError);
-        reject(abortError);
-      });
-      if (body && isReadableStream(body)) {
-        body.pipe(req);
-      } else if (body) {
-        if (typeof body === "string" || Buffer.isBuffer(body)) {
-          req.end(body);
-        } else if (isArrayBuffer(body)) {
-          req.end(
-            ArrayBuffer.isView(body) ? Buffer.from(body.buffer, body.byteOffset, body.byteLength) : Buffer.from(body)
-          );
-        } else {
-          import_log.logger.error("Unrecognized body type", body);
-          reject(new import_restError.RestError("Unrecognized body type"));
-        }
-      } else {
-        req.end();
+    return {
+      isInsecure,
+      options: {
+        agent,
+        hostname: url.hostname,
+        path: `${url.pathname}${url.search}`,
+        port: url.port,
+        method: request.method,
+        headers: request.headers.toJSON({ preserveCase: true }),
+        ...request.requestOverrides
       }
-    });
+    };
   }
   getOrCreateAgent(request, isInsecure) {
     const disableKeepAlive = request.disableKeepAlive;
@@ -138260,43 +137706,83 @@ function getResponseHeaders(res) {
   }
   return headers;
 }
-function getDecodedResponseStream(stream, headers) {
+function getDecodedResponseStream(stream, headers, abortSignal) {
   const contentEncoding = headers.get("Content-Encoding");
   if (contentEncoding === "gzip") {
-    const unzip = import_node_zlib.default.createGunzip();
-    stream.pipe(unzip);
-    return unzip;
+    return pipeResponseStream(stream, import_node_zlib.default.createGunzip(), abortSignal);
   } else if (contentEncoding === "deflate") {
-    const inflate = import_node_zlib.default.createInflate();
-    stream.pipe(inflate);
-    return inflate;
+    return pipeResponseStream(stream, import_node_zlib.default.createInflate(), abortSignal);
   }
   return stream;
+}
+function pipeUploadStream(source, destination, request, onError) {
+  let tearingDown = false;
+  const cleanupFinished = (0, import_node_stream.finished)(source, { writable: false }, onSourceComplete);
+  function onSourceComplete(error) {
+    cleanupFinished();
+    destination.removeListener("close", onDestinationClose);
+    if (error && !tearingDown) {
+      const requestError = toRequestSendError(error, request);
+      destination.destroy(requestError);
+      onError?.(requestError);
+    }
+  }
+  function onDestinationClose() {
+    tearingDown = true;
+    source.unpipe(destination);
+    (0, import_responseBody.disposeNodeStream)(source);
+  }
+  destination.once("close", onDestinationClose);
+  source.pipe(destination);
+}
+function pipeResponseStream(source, destination, abortSignal) {
+  (0, import_responseBody.setResponseBodySource)(destination, source);
+  let cleanupSource = () => {
+  };
+  let cleanupDestination = () => {
+  };
+  cleanupSource = (0, import_node_stream.finished)(source, { writable: false }, (error) => {
+    cleanupSource();
+    if (error) {
+      destination.destroy(abortSignal.aborted ? new import_AbortError.AbortError() : error);
+    }
+  });
+  cleanupDestination = (0, import_node_stream.finished)(destination, { writable: false }, () => {
+    cleanupDestination();
+    source.unpipe(destination);
+    if (source.readable) {
+      (0, import_responseBody.disposeNodeStream)(source);
+    }
+  });
+  return source.pipe(destination);
 }
 function streamToText(stream) {
   return new Promise((resolve, reject) => {
     const buffer = [];
-    stream.on("data", (chunk) => {
+    const cleanupFinished = (0, import_node_stream.finished)(stream, { writable: false }, onComplete);
+    function onData(chunk) {
       if (Buffer.isBuffer(chunk)) {
         buffer.push(chunk);
       } else {
         buffer.push(Buffer.from(chunk));
       }
-    });
-    stream.on("end", () => {
-      resolve(Buffer.concat(buffer).toString("utf8"));
-    });
-    stream.on("error", (e) => {
-      if (e && e?.name === "AbortError") {
-        reject(e);
-      } else {
+    }
+    function onComplete(error) {
+      cleanupFinished();
+      stream.removeListener("data", onData);
+      if (error?.name === "AbortError") {
+        reject(error);
+      } else if (error) {
         reject(
-          new import_restError.RestError(`Error reading response as text: ${e.message}`, {
+          new import_restError.RestError(`Error reading response as text: ${error.message}`, {
             code: import_restError.RestError.PARSE_ERROR
           })
         );
+      } else {
+        resolve(Buffer.concat(buffer).toString("utf8"));
       }
-    });
+    }
+    stream.on("data", onData);
   });
 }
 function getBodyLength(body) {
@@ -138309,7 +137795,7 @@ function getBodyLength(body) {
   } else if (isArrayBuffer(body)) {
     return body.byteLength;
   } else if (typeof body === "string") {
-    return Buffer.from(body).length;
+    return Buffer.byteLength(body);
   } else {
     return null;
   }
@@ -139534,8 +139020,8 @@ __export(proxyPolicy_exports, {
   proxyPolicyName: () => proxyPolicyName
 });
 module.exports = __toCommonJS(proxyPolicy_exports);
-var import_https_proxy_agent = __nccwpck_require__(3669);
-var import_http_proxy_agent = __nccwpck_require__(81970);
+var import_https_proxy_agent = __nccwpck_require__(71566);
+var import_http_proxy_agent = __nccwpck_require__(28947);
 var import_log = __nccwpck_require__(3644);
 const HTTPS_PROXY = "HTTPS_PROXY";
 const HTTP_PROXY = "HTTP_PROXY";
@@ -139718,6 +139204,8 @@ __export(redirectPolicy_exports, {
 });
 module.exports = __toCommonJS(redirectPolicy_exports);
 var import_log = __nccwpck_require__(3644);
+var import_responseBody = __nccwpck_require__(83008);
+var import_requestBodyHeaders = __nccwpck_require__(75634);
 const redirectPolicyName = "redirectPolicy";
 const allowedRedirect = ["GET", "HEAD"];
 function redirectPolicy(options = {}) {
@@ -139747,10 +139235,14 @@ async function handleRedirect(next, response, maxRetries, allowCrossOriginRedire
     request.url = url.toString();
     if (status === 303) {
       request.method = "GET";
-      request.headers.delete("Content-Length");
+      if (request.requestOverrides && "method" in request.requestOverrides) {
+        request.requestOverrides = { ...request.requestOverrides, method: "GET" };
+      }
+      (0, import_requestBodyHeaders.removeRequestBodyHeaders)(request);
       delete request.body;
     }
     request.headers.delete("Authorization");
+    await (0, import_responseBody.disposeResponseBody)(response);
     const res = await next(request);
     return handleRedirect(next, res, maxRetries, allowCrossOriginRedirects, currentRetries + 1);
   }
@@ -139793,6 +139285,7 @@ var import_restError = __nccwpck_require__(9758);
 var import_AbortError = __nccwpck_require__(99992);
 var import_logger = __nccwpck_require__(18459);
 var import_constants = __nccwpck_require__(31255);
+var import_responseBody = __nccwpck_require__(83008);
 const retryPolicyLogger = (0, import_logger.createClientLogger)("ts-http-runtime retryPolicy");
 const retryPolicyName = "retryPolicy";
 function retryPolicy(strategies, options = { maxRetries: import_constants.DEFAULT_RETRY_POLICY_COUNT }) {
@@ -139860,6 +139353,9 @@ function retryPolicy(strategies, options = { maxRetries: import_constants.DEFAUL
             strategyLogger.info(
               `Retry ${retryCount}: Retry strategy ${strategy.name} retries after ${retryAfterInMs}`
             );
+            if (response) {
+              await (0, import_responseBody.disposeResponseBody)(response);
+            }
             await (0, import_helpers.delay)(retryAfterInMs, void 0, { abortSignal: request.abortSignal });
             continue retryRequest;
           }
@@ -139867,6 +139363,9 @@ function retryPolicy(strategies, options = { maxRetries: import_constants.DEFAUL
             strategyLogger.info(
               `Retry ${retryCount}: Retry strategy ${strategy.name} redirects to ${redirectTo}`
             );
+            if (response) {
+              await (0, import_responseBody.disposeResponseBody)(response);
+            }
             request.url = redirectTo;
             continue retryRequest;
           }
@@ -140673,7 +140172,10 @@ __export(internal_exports, {
   calculateRetryDelay: () => import_delay.calculateRetryDelay,
   computeSha256Hash: () => import_sha256.computeSha256Hash,
   computeSha256Hmac: () => import_sha256.computeSha256Hmac,
+  disposeResponseBody: () => import_responseBody.disposeResponseBody,
   getRandomIntegerInclusive: () => import_random.getRandomIntegerInclusive,
+  getRequestCompletion: () => import_responseBody.getRequestCompletion,
+  getResponseBodyCompletion: () => import_responseBody.getResponseBodyCompletion,
   isBrowser: () => import_env.isBrowser,
   isBun: () => import_env.isBun,
   isDeno: () => import_env.isDeno,
@@ -140697,9 +140199,228 @@ var import_uuid = __nccwpck_require__(5023);
 var import_env = __nccwpck_require__(41573);
 var import_bytesEncoding = __nccwpck_require__(82921);
 var import_sanitizer = __nccwpck_require__(7784);
+var import_responseBody = __nccwpck_require__(83008);
 // Annotate the CommonJS export names for ESM import in node:
 0 && (0);
 //# sourceMappingURL=internal.js.map
+
+
+/***/ }),
+
+/***/ 96463:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var nodeExpectContinue_exports = {};
+__export(nodeExpectContinue_exports, {
+  addExpectContinueFraming: () => addExpectContinueFraming,
+  createExpectContinueRequest: () => createExpectContinueRequest,
+  getEffectiveHeaderValues: () => getEffectiveHeaderValues,
+  hasExpectContinue: () => hasExpectContinue
+});
+module.exports = __toCommonJS(nodeExpectContinue_exports);
+var import_requestBodyHeaders = __nccwpck_require__(75634);
+const EXPECT_CONTINUE_TIMEOUT_IN_MS = 1e3;
+function getHeaderValues(headers, name) {
+  if (Array.isArray(headers)) {
+    return (0, import_requestBodyHeaders.getHeaderPairs)(headers).filter(([key]) => typeof key === "string" && key.toLowerCase() === name).flatMap(([, value]) => Array.isArray(value) ? value : [value]);
+  }
+  if (headers && typeof headers === "object") {
+    if ("get" in headers && typeof headers.get === "function") {
+      const value2 = headers.get(name);
+      return value2 === void 0 || value2 === null ? [] : [value2];
+    }
+    let value;
+    for (const [key, entry] of Object.entries(headers)) {
+      if (key.toLowerCase() === name) {
+        value = entry;
+      }
+    }
+    return value === void 0 ? [] : Array.isArray(value) ? value : [value];
+  }
+  return [];
+}
+function getEffectiveHeaderValues(request, name) {
+  const headers = request.requestOverrides && "headers" in request.requestOverrides ? request.requestOverrides.headers : request.headers;
+  return getHeaderValues(headers, name.toLowerCase());
+}
+function hasExpectContinue(request) {
+  return getEffectiveHeaderValues(request, "expect").some(
+    (value) => typeof value === "string" && value.split(",").some((token) => token.trim().toLowerCase() === "100-continue")
+  );
+}
+function addHeader(headers, name, value) {
+  if (!Array.isArray(headers)) {
+    return { ...headers, [name]: value };
+  }
+  return Array.isArray(headers[0]) ? [...headers, [name, value]] : [...headers, name, value];
+}
+function hasHeader(headers, name) {
+  if (Array.isArray(headers)) {
+    return (0, import_requestBodyHeaders.getHeaderPairs)(headers).some(
+      ([key]) => typeof key === "string" && key.toLowerCase() === name
+    );
+  }
+  return Object.keys(headers ?? {}).some((key) => key.toLowerCase() === name);
+}
+function addExpectContinueFraming(options, bodyLength) {
+  if (hasHeader(options.headers, "content-length") || hasHeader(options.headers, "transfer-encoding")) {
+    return;
+  }
+  options.headers = addHeader(
+    options.headers,
+    bodyLength === null ? "Transfer-Encoding" : "Content-Length",
+    bodyLength === null ? "chunked" : String(bodyLength)
+  );
+}
+function createExpectContinueRequest(options) {
+  let fallback;
+  let waiting = true;
+  let bodyStarted = false;
+  let errorReported = false;
+  let request;
+  let bodyError;
+  const bodyStream = options.bodyStream;
+  bodyStream?.once("error", onBodyError);
+  if (bodyStream && "errored" in bodyStream && bodyStream.errored instanceof Error) {
+    process.nextTick(onBodyError, bodyStream.errored);
+    return;
+  }
+  try {
+    request = options.createRequest(onResponse);
+  } catch (error) {
+    onError(error);
+    return;
+  }
+  function stopWaiting(keepBodyObserved = false) {
+    waiting = false;
+    if (fallback !== void 0) {
+      clearTimeout(fallback);
+      fallback = void 0;
+    }
+    request?.removeListener("continue", sendBody);
+    request?.removeListener("socket", onSocket);
+    if (!keepBodyObserved) {
+      bodyStream?.removeListener("error", onBodyError);
+    }
+  }
+  function onError(error) {
+    const requestError = error instanceof Error ? error : new Error(String(error));
+    if (!errorReported) {
+      errorReported = true;
+      stopWaiting();
+      options.onError(requestError);
+    }
+    return requestError;
+  }
+  function onBodyError(error) {
+    if (errorReported || !waiting && !bodyStarted) {
+      return;
+    }
+    errorReported = true;
+    bodyError = error instanceof Error ? error : new Error(String(error));
+    stopWaiting();
+    options.onBodyError(error);
+    request?.destroy(bodyError);
+  }
+  function sendBody() {
+    if (!waiting) {
+      return;
+    }
+    bodyStarted = true;
+    stopWaiting(true);
+    try {
+      options.sendBody(request);
+    } catch (error) {
+      onBodyError(error);
+    } finally {
+      bodyStream?.removeListener("error", onBodyError);
+    }
+  }
+  function onAbort() {
+    stopWaiting();
+    options.onAbort(request);
+  }
+  function onSocket() {
+    if (!waiting) {
+      return;
+    }
+    try {
+      request.flushHeaders();
+      if (!waiting) {
+        return;
+      }
+      request.write("", (error) => {
+        if (error) {
+          request.destroy(onError(error));
+        } else if (waiting) {
+          fallback = setTimeout(sendBody, EXPECT_CONTINUE_TIMEOUT_IN_MS);
+        }
+      });
+    } catch (error) {
+      request.destroy(onError(error));
+    }
+  }
+  function onResponse(response) {
+    stopWaiting();
+    if (!bodyStarted) {
+      request.shouldKeepAlive = false;
+      const destroyRequest = () => {
+        response.removeListener("end", destroyRequest);
+        response.removeListener("close", destroyRequest);
+        request.destroy();
+      };
+      response.once("end", destroyRequest);
+      response.once("close", destroyRequest);
+      if (response.readableEnded || response.destroyed) {
+        destroyRequest();
+      }
+    }
+    options.onResponse(response);
+  }
+  request.once("error", onError);
+  if (bodyError) {
+    request.destroy(bodyError);
+    return;
+  }
+  if (options.abortSignal.aborted) {
+    onAbort();
+    return;
+  }
+  options.abortSignal.addEventListener("abort", onAbort, { once: true });
+  request.once("close", () => stopWaiting());
+  if (request.destroyed || request.closed) {
+    stopWaiting();
+  }
+  if (!waiting) {
+    return;
+  }
+  request.once("continue", sendBody);
+  if (request.socket) {
+    onSocket();
+  } else {
+    request.once("socket", onSocket);
+  }
+}
+// Annotate the CommonJS export names for ESM import in node:
+0 && (0);
+//# sourceMappingURL=nodeExpectContinue.js.map
 
 
 /***/ }),
@@ -140777,6 +140498,272 @@ function getRandomIntegerInclusive(min, max) {
 
 /***/ }),
 
+/***/ 75634:
+/***/ ((module) => {
+
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var requestBodyHeaders_exports = {};
+__export(requestBodyHeaders_exports, {
+  getHeaderPairs: () => getHeaderPairs,
+  removeExpectContinueHeader: () => removeExpectContinueHeader,
+  removeRequestBodyHeaders: () => removeRequestBodyHeaders
+});
+module.exports = __toCommonJS(requestBodyHeaders_exports);
+function getHeaderPairs(headers) {
+  return Array.isArray(headers[0]) ? headers : Array.from({ length: Math.ceil(headers.length / 2) }, (_, index) => [
+    headers[index * 2],
+    headers[index * 2 + 1]
+  ]);
+}
+function isIterable(value) {
+  return Symbol.iterator in value && typeof value[Symbol.iterator] === "function";
+}
+function removeContinueToken(value) {
+  if (typeof value === "string") {
+    const tokens = value.split(",");
+    const remaining = tokens.filter((token) => token.trim().toLowerCase() !== "100-continue");
+    if (remaining.length === tokens.length) {
+      return value;
+    }
+    return remaining.map((token) => token.trim()).filter(Boolean).join(", ") || void 0;
+  }
+  if (Array.isArray(value)) {
+    const remaining = value.map(removeContinueToken).filter((entry) => entry !== void 0);
+    return remaining.length > 0 ? remaining : void 0;
+  }
+  return value;
+}
+function stripRequestBodyHeaders(request, removeFraming) {
+  const stripHeaderValue = (name, value) => {
+    const lowerName = name.toLowerCase();
+    if (removeFraming && (lowerName === "content-length" || lowerName === "transfer-encoding" || lowerName === "trailer")) {
+      return void 0;
+    }
+    return lowerName === "expect" ? removeContinueToken(value) : value;
+  };
+  const stripHeaderPairs = (pairs) => pairs.flatMap(([name, value]) => {
+    const updated = typeof name === "string" ? stripHeaderValue(name, value) : value;
+    return updated === void 0 ? [] : [[name, updated]];
+  });
+  for (const [name, value] of request.headers) {
+    const updated = stripHeaderValue(name, value);
+    if (updated === void 0) {
+      request.headers.delete(name);
+    } else if (typeof updated === "string" && updated !== value) {
+      request.headers.set(name, updated);
+    }
+  }
+  const overrides = request.requestOverrides;
+  if (!overrides || !("headers" in overrides)) {
+    return;
+  }
+  const headers = overrides.headers;
+  if (Array.isArray(headers)) {
+    const updatedPairs = stripHeaderPairs(getHeaderPairs(headers));
+    request.requestOverrides = {
+      ...overrides,
+      headers: Array.isArray(headers[0]) ? updatedPairs : updatedPairs.flat()
+    };
+  } else if (headers && typeof headers === "object" && isIterable(headers)) {
+    const pairs = Array.from(headers, (entry) => {
+      if (!Array.isArray(entry) || entry.length !== 2) {
+        throw new TypeError("Header entry must be a name/value pair");
+      }
+      return entry;
+    });
+    request.requestOverrides = { ...overrides, headers: stripHeaderPairs(pairs) };
+  } else if (headers && typeof headers === "object") {
+    const updatedHeaders = {};
+    for (const [name, value] of Object.entries(headers)) {
+      const updated = stripHeaderValue(name, value);
+      if (updated !== void 0) {
+        updatedHeaders[name] = updated;
+      }
+    }
+    request.requestOverrides = { ...overrides, headers: updatedHeaders };
+  }
+}
+function removeExpectContinueHeader(request) {
+  stripRequestBodyHeaders(request, false);
+}
+function removeRequestBodyHeaders(request) {
+  stripRequestBodyHeaders(request, true);
+}
+// Annotate the CommonJS export names for ESM import in node:
+0 && (0);
+//# sourceMappingURL=requestBodyHeaders.js.map
+
+
+/***/ }),
+
+/***/ 83008:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var responseBody_exports = {};
+__export(responseBody_exports, {
+  disposeNodeStream: () => disposeNodeStream,
+  disposeResponseBody: () => disposeResponseBody,
+  getRequestCompletion: () => getRequestCompletion,
+  getResponseBodyCompletion: () => getResponseBodyCompletion,
+  setRequestCompletion: () => setRequestCompletion,
+  setResponseBodyCompletion: () => setResponseBodyCompletion,
+  setResponseBodyDisposer: () => setResponseBodyDisposer,
+  setResponseBodySource: () => setResponseBodySource
+});
+module.exports = __toCommonJS(responseBody_exports);
+var import_log = __nccwpck_require__(3644);
+const responseBodySources = /* @__PURE__ */ new WeakMap();
+const responseBodyDisposers = /* @__PURE__ */ new WeakMap();
+const requestCompletions = /* @__PURE__ */ new WeakMap();
+const responseBodyCompletions = /* @__PURE__ */ new WeakMap();
+function setRequestCompletion(response, completion) {
+  requestCompletions.set(response, completion);
+  completion.then(
+    () => requestCompletions.get(response) === completion && requestCompletions.delete(response)
+  ).catch((error) => {
+    import_log.logger.warning("Error tracking request completion", error);
+  });
+}
+function getRequestCompletion(response) {
+  return requestCompletions.get(response);
+}
+function setResponseBodyCompletion(response, completion) {
+  responseBodyCompletions.set(response, completion);
+  completion.then(
+    () => responseBodyCompletions.get(response) === completion && responseBodyCompletions.delete(response)
+  ).catch((error) => {
+    import_log.logger.warning("Error tracking response body completion", error);
+  });
+}
+function getResponseBodyCompletion(response) {
+  return responseBodyCompletions.get(response);
+}
+function isNodeResponseBody(value) {
+  return typeof value === "object" && value !== null && "resume" in value && typeof value.resume === "function";
+}
+function isNodeEventEmitterBody(value) {
+  return "on" in value && typeof value.on === "function" && "once" in value && typeof value.once === "function" && "removeListener" in value && typeof value.removeListener === "function";
+}
+function isBrowserResponseBody(value) {
+  return typeof value === "object" && value !== null && "cancel" in value && typeof value.cancel === "function";
+}
+function setResponseBodySource(body, source) {
+  if (isNodeResponseBody(body) && isNodeResponseBody(source)) {
+    responseBodySources.set(body, source);
+  }
+}
+function setResponseBodyDisposer(response, dispose) {
+  responseBodyDisposers.set(response, dispose);
+  return () => {
+    if (responseBodyDisposers.get(response) === dispose) {
+      responseBodyDisposers.delete(response);
+    }
+  };
+}
+function disposeNodeResponseBody(readableStream, disposed = /* @__PURE__ */ new Set()) {
+  if (disposed.has(readableStream)) {
+    return;
+  }
+  disposed.add(readableStream);
+  const source = responseBodySources.get(readableStream);
+  responseBodySources.delete(readableStream);
+  if (readableStream.closed !== true) {
+    if (readableStream.destroy) {
+      if (isNodeEventEmitterBody(readableStream)) {
+        const onError = (error) => {
+          import_log.logger.warning("Error disposing Node stream", error);
+        };
+        const onClose = () => {
+          readableStream.removeListener("error", onError);
+        };
+        readableStream.on("error", onError);
+        readableStream.once("close", onClose);
+        try {
+          readableStream.destroy();
+        } catch (error) {
+          readableStream.removeListener("error", onError);
+          readableStream.removeListener("close", onClose);
+          throw error;
+        }
+      } else {
+        readableStream.destroy();
+      }
+    } else {
+      readableStream.resume();
+    }
+  }
+  if (source) {
+    disposeNodeResponseBody(source, disposed);
+  }
+}
+function disposeNodeStream(stream) {
+  try {
+    disposeNodeResponseBody(stream);
+  } catch (error) {
+    import_log.logger.warning("Error disposing Node stream", error);
+  }
+}
+async function disposeResponseBody(response) {
+  try {
+    const dispose = responseBodyDisposers.get(response);
+    responseBodyDisposers.delete(response);
+    try {
+      const readableStream = response.readableStreamBody;
+      if (isNodeResponseBody(readableStream)) {
+        disposeNodeStream(readableStream);
+        return;
+      }
+      const browserStream = response.browserStreamBody;
+      if (isBrowserResponseBody(browserStream)) {
+        await browserStream.cancel();
+      }
+    } finally {
+      dispose?.();
+    }
+  } catch (error) {
+    import_log.logger.warning("Error disposing response body", error);
+  }
+}
+// Annotate the CommonJS export names for ESM import in node:
+0 && (0);
+//# sourceMappingURL=responseBody.js.map
+
+
+/***/ }),
+
 /***/ 7784:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -140814,6 +140801,7 @@ const defaultAllowedHeaderNames = [
   "ms-cv",
   "return-client-request-id",
   "traceparent",
+  "azure-deprecating",
   "Access-Control-Allow-Credentials",
   "Access-Control-Allow-Headers",
   "Access-Control-Allow-Methods",
@@ -152964,6 +152952,766 @@ module.exports = index;
 
 /***/ }),
 
+/***/ 319:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+"use strict";
+
+// EXPORTS
+__nccwpck_require__.d(__webpack_exports__, {
+  g6: () => (/* binding */ Agent)
+});
+
+// UNUSED EXPORTS: json, req, toBuffer
+
+// EXTERNAL MODULE: external "net"
+var external_net_ = __nccwpck_require__(69278);
+// EXTERNAL MODULE: external "http"
+var external_http_ = __nccwpck_require__(58611);
+// EXTERNAL MODULE: external "https"
+var external_https_ = __nccwpck_require__(65692);
+;// CONCATENATED MODULE: ./node_modules/agent-base/dist/helpers.js
+
+
+async function toBuffer(stream) {
+    let length = 0;
+    const chunks = [];
+    for await (const chunk of stream) {
+        length += chunk.length;
+        chunks.push(chunk);
+    }
+    return Buffer.concat(chunks, length);
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function json(stream) {
+    const buf = await toBuffer(stream);
+    const str = buf.toString('utf8');
+    try {
+        return JSON.parse(str);
+    }
+    catch (_err) {
+        const err = _err;
+        err.message += ` (input: ${str})`;
+        throw err;
+    }
+}
+function req(url, opts = {}) {
+    const href = typeof url === 'string' ? url : url.href;
+    const req = (href.startsWith('https:') ? https : http).request(url, opts);
+    const promise = new Promise((resolve, reject) => {
+        req
+            .once('response', resolve)
+            .once('error', reject)
+            .end();
+    });
+    req.then = promise.then.bind(promise);
+    return req;
+}
+//# sourceMappingURL=helpers.js.map
+;// CONCATENATED MODULE: ./node_modules/agent-base/dist/index.js
+
+
+
+
+const INTERNAL = Symbol('AgentBaseInternalState');
+class Agent extends external_http_.Agent {
+    constructor(opts) {
+        super(opts);
+        this[INTERNAL] = {};
+    }
+    /**
+     * Determine whether this is an `http` or `https` request.
+     */
+    isSecureEndpoint(options) {
+        if (options) {
+            // First check the `secureEndpoint` property explicitly, since this
+            // means that a parent `Agent` is "passing through" to this instance.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if (typeof options.secureEndpoint === 'boolean') {
+                return options.secureEndpoint;
+            }
+            // If no explicit `secure` endpoint, check if `protocol` property is
+            // set. This will usually be the case since using a full string URL
+            // or `URL` instance should be the most common usage.
+            if (typeof options.protocol === 'string') {
+                return options.protocol === 'https:';
+            }
+        }
+        // Finally, if no `protocol` property was set, then fall back to
+        // checking the stack trace of the current call stack, and try to
+        // detect the "https" module.
+        const { stack } = new Error();
+        if (typeof stack !== 'string')
+            return false;
+        return stack
+            .split('\n')
+            .some((l) => l.indexOf('(https.js:') !== -1 ||
+            l.indexOf('node:https:') !== -1);
+    }
+    // In order to support async signatures in `connect()` and Node's native
+    // connection pooling in `http.Agent`, the array of sockets for each origin
+    // has to be updated synchronously. This is so the length of the array is
+    // accurate when `addRequest()` is next called. We achieve this by creating a
+    // fake socket and adding it to `sockets[origin]` and incrementing
+    // `totalSocketCount`.
+    incrementSockets(name) {
+        // If `maxSockets` and `maxTotalSockets` are both Infinity then there is no
+        // need to create a fake socket because Node.js native connection pooling
+        // will never be invoked.
+        if (this.maxSockets === Infinity && this.maxTotalSockets === Infinity) {
+            return null;
+        }
+        // All instances of `sockets` are expected TypeScript errors. The
+        // alternative is to add it as a private property of this class but that
+        // will break TypeScript subclassing.
+        if (!this.sockets[name]) {
+            // @ts-expect-error `sockets` is readonly in `@types/node`
+            this.sockets[name] = [];
+        }
+        const fakeSocket = new external_net_.Socket({ writable: false });
+        this.sockets[name].push(fakeSocket);
+        // @ts-expect-error `totalSocketCount` isn't defined in `@types/node`
+        this.totalSocketCount++;
+        return fakeSocket;
+    }
+    decrementSockets(name, socket) {
+        if (!this.sockets[name] || socket === null) {
+            return;
+        }
+        const sockets = this.sockets[name];
+        const index = sockets.indexOf(socket);
+        if (index !== -1) {
+            sockets.splice(index, 1);
+            // @ts-expect-error  `totalSocketCount` isn't defined in `@types/node`
+            this.totalSocketCount--;
+            if (sockets.length === 0) {
+                // @ts-expect-error `sockets` is readonly in `@types/node`
+                delete this.sockets[name];
+            }
+        }
+    }
+    // In order to properly update the socket pool, we need to call `getName()` on
+    // the core `https.Agent` if it is a secureEndpoint.
+    getName(options) {
+        const secureEndpoint = this.isSecureEndpoint(options);
+        if (secureEndpoint) {
+            return external_https_.Agent.prototype.getName.call(this, options);
+        }
+        return super.getName(options);
+    }
+    createSocket(req, options, cb) {
+        const connectOpts = {
+            ...options,
+            secureEndpoint: this.isSecureEndpoint(options),
+        };
+        const name = this.getName(connectOpts);
+        const fakeSocket = this.incrementSockets(name);
+        Promise.resolve()
+            .then(() => this.connect(req, connectOpts))
+            .then((socket) => {
+            this.decrementSockets(name, fakeSocket);
+            if (typeof socket
+                .addRequest === 'function') {
+                try {
+                    return socket.addRequest(req, connectOpts);
+                }
+                catch (err) {
+                    return cb(err);
+                }
+            }
+            this[INTERNAL].currentSocket = socket;
+            // @ts-expect-error `createSocket()` isn't defined in `@types/node`
+            super.createSocket(req, options, cb);
+        }, (err) => {
+            this.decrementSockets(name, fakeSocket);
+            cb(err);
+        });
+    }
+    createConnection() {
+        const socket = this[INTERNAL].currentSocket;
+        this[INTERNAL].currentSocket = undefined;
+        if (!socket) {
+            throw new Error('No socket was returned in the `connect()` function');
+        }
+        return socket;
+    }
+    get defaultPort() {
+        return (this[INTERNAL].defaultPort ??
+            (this.protocol === 'https:' ? 443 : 80));
+    }
+    set defaultPort(v) {
+        if (this[INTERNAL]) {
+            this[INTERNAL].defaultPort = v;
+        }
+    }
+    get protocol() {
+        return (this[INTERNAL].protocol ??
+            (this.isSecureEndpoint() ? 'https:' : 'http:'));
+    }
+    set protocol(v) {
+        if (this[INTERNAL]) {
+            this[INTERNAL].protocol = v;
+        }
+    }
+}
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+
+/***/ 28947:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+"use strict";
+__nccwpck_require__.r(__webpack_exports__);
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   HttpProxyAgent: () => (/* binding */ HttpProxyAgent)
+/* harmony export */ });
+/* harmony import */ var net__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(69278);
+/* harmony import */ var tls__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(64756);
+/* harmony import */ var debug__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(2830);
+/* harmony import */ var events__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(24434);
+/* harmony import */ var agent_base__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(319);
+/* harmony import */ var url__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(87016);
+/* harmony import */ var proxy_agent_negotiate__WEBPACK_IMPORTED_MODULE_6__ = __nccwpck_require__(16825);
+
+
+
+
+
+
+
+const debug = debug__WEBPACK_IMPORTED_MODULE_2__('http-proxy-agent');
+/**
+ * The `HttpProxyAgent` implements an HTTP Agent subclass that connects
+ * to the specified "HTTP proxy server" in order to proxy HTTP requests.
+ */
+class HttpProxyAgent extends agent_base__WEBPACK_IMPORTED_MODULE_4__/* .Agent */ .g6 {
+    constructor(proxy, opts) {
+        super(opts);
+        this.proxy = typeof proxy === 'string' ? new url__WEBPACK_IMPORTED_MODULE_5__.URL(proxy) : proxy;
+        this.proxyHeaders = opts?.headers ?? {};
+        debug('Creating new HttpProxyAgent instance: %o', this.proxy.href);
+        if (opts?.negotiate) {
+            this.onProxyAuth = (0,proxy_agent_negotiate__WEBPACK_IMPORTED_MODULE_6__/* .createNegotiateAuth */ .h)();
+        }
+        else if (opts?.onProxyAuth) {
+            this.onProxyAuth = opts.onProxyAuth;
+        }
+        // Trim off the brackets from IPv6 addresses
+        const host = (this.proxy.hostname || this.proxy.host).replace(/^\[|\]$/g, '');
+        const port = this.proxy.port
+            ? parseInt(this.proxy.port, 10)
+            : this.proxy.protocol === 'https:'
+                ? 443
+                : 80;
+        this.connectOpts = {
+            ...(opts
+                ? omit(opts, 'headers', 'onProxyAuth', 'negotiate')
+                : null),
+            host,
+            port,
+        };
+    }
+    addRequest(req, opts) {
+        req._header = null;
+        this.setRequestProps(req, opts);
+        // @ts-expect-error `addRequest()` isn't defined in `@types/node`
+        super.addRequest(req, opts);
+    }
+    setRequestProps(req, opts) {
+        const { proxy } = this;
+        const protocol = opts.secureEndpoint ? 'https:' : 'http:';
+        const hostname = req.getHeader('host') || 'localhost';
+        const base = `${protocol}//${hostname}`;
+        const url = new url__WEBPACK_IMPORTED_MODULE_5__.URL(req.path, base);
+        if (opts.port !== 80) {
+            url.port = String(opts.port);
+        }
+        // Change the `http.ClientRequest` instance's "path" field
+        // to the absolute path of the URL that will be requested.
+        req.path = String(url);
+        // Inject the `Proxy-Authorization` header if necessary.
+        const headers = typeof this.proxyHeaders === 'function'
+            ? this.proxyHeaders()
+            : { ...this.proxyHeaders };
+        if (proxy.username || proxy.password) {
+            const auth = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
+            headers['Proxy-Authorization'] = `Basic ${Buffer.from(auth).toString('base64')}`;
+        }
+        if (!headers['Proxy-Connection']) {
+            headers['Proxy-Connection'] = this.keepAlive
+                ? 'Keep-Alive'
+                : 'close';
+        }
+        for (const name of Object.keys(headers)) {
+            const value = headers[name];
+            if (value) {
+                req.setHeader(name, value);
+            }
+        }
+    }
+    async connect(req, opts) {
+        req._header = null;
+        if (!req.path.includes('://')) {
+            this.setRequestProps(req, opts);
+        }
+        // At this point, the http ClientRequest's internal `_header` field
+        // might have already been set. If this is the case then we'll need
+        // to re-generate the string since we just changed the `req.path`.
+        let first;
+        let endOfHeaders;
+        debug('Regenerating stored HTTP header string for request');
+        req._implicitHeader();
+        if (req.outputData && req.outputData.length > 0) {
+            debug('Patching connection write() output buffer with updated header');
+            first = req.outputData[0].data;
+            endOfHeaders = first.indexOf('\r\n\r\n') + 4;
+            req.outputData[0].data =
+                req._header + first.substring(endOfHeaders);
+            debug('Output buffer: %o', req.outputData[0].data);
+        }
+        // Create a socket connection to the proxy server.
+        let socket;
+        if (this.proxy.protocol === 'https:') {
+            debug('Creating `tls.Socket`: %o', this.connectOpts);
+            socket = tls__WEBPACK_IMPORTED_MODULE_1__.connect(this.connectOpts);
+        }
+        else {
+            debug('Creating `net.Socket`: %o', this.connectOpts);
+            socket = net__WEBPACK_IMPORTED_MODULE_0__.connect(this.connectOpts);
+        }
+        // Wait for the socket's `connect` event, so that this `callback()`
+        // function throws instead of the `http` request machinery. This is
+        // important for i.e. `PacProxyAgent` which determines a failed proxy
+        // connection via the `callback()` function throwing.
+        await (0,events__WEBPACK_IMPORTED_MODULE_3__.once)(socket, 'connect');
+        // Emit the 'proxyConnect' event for parity with https-proxy-agent
+        const connect = { socket };
+        req.emit('proxyConnect', connect);
+        this.emit('proxyConnect', connect, req);
+        req.emit('proxy', { proxy: this.proxy.href, socket });
+        return socket;
+    }
+}
+HttpProxyAgent.protocols = ['http', 'https'];
+function omit(obj, ...keys) {
+    const ret = {};
+    let key;
+    for (key in obj) {
+        if (!keys.includes(key)) {
+            ret[key] = obj[key];
+        }
+    }
+    return ret;
+}
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+
+/***/ 71566:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+"use strict";
+// ESM COMPAT FLAG
+__nccwpck_require__.r(__webpack_exports__);
+
+// EXPORTS
+__nccwpck_require__.d(__webpack_exports__, {
+  HttpsProxyAgent: () => (/* binding */ HttpsProxyAgent)
+});
+
+// EXTERNAL MODULE: external "net"
+var external_net_ = __nccwpck_require__(69278);
+// EXTERNAL MODULE: external "tls"
+var external_tls_ = __nccwpck_require__(64756);
+// EXTERNAL MODULE: external "assert"
+var external_assert_ = __nccwpck_require__(42613);
+// EXTERNAL MODULE: ./node_modules/debug/src/index.js
+var src = __nccwpck_require__(2830);
+// EXTERNAL MODULE: ./node_modules/agent-base/dist/index.js + 1 modules
+var dist = __nccwpck_require__(319);
+// EXTERNAL MODULE: external "url"
+var external_url_ = __nccwpck_require__(87016);
+;// CONCATENATED MODULE: ./node_modules/https-proxy-agent/dist/parse-proxy-response.js
+
+const debug = src('https-proxy-agent:parse-proxy-response');
+function parseProxyResponse(socket) {
+    return new Promise((resolve, reject) => {
+        // we need to buffer any HTTP traffic that happens with the proxy before we get
+        // the CONNECT response, so that if the response is anything other than an "200"
+        // response code, then we can re-play the "data" events on the socket once the
+        // HTTP parser is hooked up...
+        let buffersLength = 0;
+        const buffers = [];
+        function read() {
+            const b = socket.read();
+            if (b)
+                ondata(b);
+            else
+                socket.once('readable', read);
+        }
+        function cleanup() {
+            socket.removeListener('end', onend);
+            socket.removeListener('error', onerror);
+            socket.removeListener('readable', read);
+        }
+        function onend() {
+            cleanup();
+            debug('onend');
+            reject(new Error('Proxy connection ended before receiving CONNECT response'));
+        }
+        function onerror(err) {
+            cleanup();
+            debug('onerror %o', err);
+            reject(err);
+        }
+        function ondata(b) {
+            buffers.push(b);
+            buffersLength += b.length;
+            const buffered = Buffer.concat(buffers, buffersLength);
+            const endOfHeaders = buffered.indexOf('\r\n\r\n');
+            if (endOfHeaders === -1) {
+                // keep buffering
+                debug('have not received end of HTTP headers yet...');
+                read();
+                return;
+            }
+            const headerParts = buffered
+                .slice(0, endOfHeaders)
+                .toString('ascii')
+                .split('\r\n');
+            const firstLine = headerParts.shift();
+            if (!firstLine) {
+                socket.destroy();
+                return reject(new Error('No header received from proxy CONNECT response'));
+            }
+            const firstLineParts = firstLine.split(' ');
+            const statusCode = +firstLineParts[1];
+            const statusText = firstLineParts.slice(2).join(' ');
+            const headers = {};
+            for (const header of headerParts) {
+                if (!header)
+                    continue;
+                const firstColon = header.indexOf(':');
+                if (firstColon === -1) {
+                    socket.destroy();
+                    return reject(new Error(`Invalid header from proxy CONNECT response: "${header}"`));
+                }
+                const key = header.slice(0, firstColon).toLowerCase();
+                const value = header.slice(firstColon + 1).trimStart();
+                const current = headers[key];
+                if (typeof current === 'string') {
+                    headers[key] = [current, value];
+                }
+                else if (Array.isArray(current)) {
+                    current.push(value);
+                }
+                else {
+                    headers[key] = value;
+                }
+            }
+            debug('got proxy server response: %o %o', firstLine, headers);
+            cleanup();
+            resolve({
+                connect: {
+                    statusCode,
+                    statusText,
+                    headers,
+                },
+                buffered,
+            });
+        }
+        socket.on('error', onerror);
+        socket.on('end', onend);
+        read();
+    });
+}
+//# sourceMappingURL=parse-proxy-response.js.map
+// EXTERNAL MODULE: ./node_modules/proxy-agent-negotiate/dist/index.js
+var proxy_agent_negotiate_dist = __nccwpck_require__(16825);
+;// CONCATENATED MODULE: ./node_modules/https-proxy-agent/dist/index.js
+
+
+
+
+
+
+
+
+const dist_debug = src('https-proxy-agent');
+const setServernameFromNonIpHost = (options) => {
+    if (options.servername === undefined &&
+        options.host &&
+        !external_net_.isIP(options.host)) {
+        return {
+            ...options,
+            servername: options.host,
+        };
+    }
+    return options;
+};
+/**
+ * The `HttpsProxyAgent` implements an HTTP Agent subclass that connects to
+ * the specified "HTTP(s) proxy server" in order to proxy HTTPS requests.
+ *
+ * Outgoing HTTP requests are first tunneled through the proxy server using the
+ * `CONNECT` HTTP request method to establish a connection to the proxy server,
+ * and then the proxy server connects to the destination target and issues the
+ * HTTP request from the proxy server.
+ *
+ * `https:` requests have their socket connection upgraded to TLS once
+ * the connection to the proxy server has been established.
+ */
+class HttpsProxyAgent extends dist/* Agent */.g6 {
+    constructor(proxy, opts) {
+        super(opts);
+        this.options = { path: undefined };
+        this.proxy = typeof proxy === 'string' ? new external_url_.URL(proxy) : proxy;
+        this.proxyHeaders = opts?.headers ?? {};
+        dist_debug('Creating new HttpsProxyAgent instance: %o', this.proxy.href);
+        if (opts?.negotiate) {
+            this.onProxyAuth = (0,proxy_agent_negotiate_dist/* createNegotiateAuth */.h)();
+        }
+        else if (opts?.onProxyAuth) {
+            this.onProxyAuth = opts.onProxyAuth;
+        }
+        // Trim off the brackets from IPv6 addresses
+        const host = (this.proxy.hostname || this.proxy.host).replace(/^\[|\]$/g, '');
+        const port = this.proxy.port
+            ? parseInt(this.proxy.port, 10)
+            : this.proxy.protocol === 'https:'
+                ? 443
+                : 80;
+        this.connectOpts = {
+            // Attempt to negotiate http/1.1 for proxy servers that support http/2
+            ALPNProtocols: ['http/1.1'],
+            ...(opts
+                ? omit(opts, 'headers', 'onProxyAuth', 'negotiate')
+                : null),
+            host,
+            port,
+        };
+    }
+    /**
+     * Called when the node-core HTTP client library is creating a
+     * new HTTP request.
+     */
+    async connect(req, opts) {
+        const { proxy } = this;
+        if (!opts.host) {
+            throw new TypeError('No "host" provided');
+        }
+        // Create a socket connection to the proxy server.
+        let socket;
+        if (proxy.protocol === 'https:') {
+            dist_debug('Creating `tls.Socket`: %o', this.connectOpts);
+            socket = external_tls_.connect(setServernameFromNonIpHost(this.connectOpts));
+        }
+        else {
+            dist_debug('Creating `net.Socket`: %o', this.connectOpts);
+            socket = external_net_.connect(this.connectOpts);
+        }
+        const headers = typeof this.proxyHeaders === 'function'
+            ? this.proxyHeaders()
+            : { ...this.proxyHeaders };
+        const host = external_net_.isIPv6(opts.host) ? `[${opts.host}]` : opts.host;
+        let payload = `CONNECT ${host}:${opts.port} HTTP/1.1\r\n`;
+        // Inject the `Proxy-Authorization` header if necessary.
+        if (proxy.username || proxy.password) {
+            const auth = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
+            headers['Proxy-Authorization'] = `Basic ${Buffer.from(auth).toString('base64')}`;
+        }
+        headers.Host = `${host}:${opts.port}`;
+        if (!headers['Proxy-Connection']) {
+            headers['Proxy-Connection'] = this.keepAlive
+                ? 'Keep-Alive'
+                : 'close';
+        }
+        for (const name of Object.keys(headers)) {
+            payload += `${name}: ${headers[name]}\r\n`;
+        }
+        const proxyResponsePromise = parseProxyResponse(socket);
+        socket.write(`${payload}\r\n`);
+        const { connect, buffered } = await proxyResponsePromise;
+        req.emit('proxyConnect', connect);
+        this.emit('proxyConnect', connect, req);
+        req.emit('proxy', { proxy: this.proxy.href, socket });
+        if (connect.statusCode === 200) {
+            req.once('socket', resume);
+            if (opts.secureEndpoint) {
+                // The proxy is connecting to a TLS server, so upgrade
+                // this socket connection to a TLS connection.
+                dist_debug('Upgrading socket connection to TLS');
+                return external_tls_.connect({
+                    ...omit(setServernameFromNonIpHost(opts), 'host', 'path', 'port'),
+                    socket,
+                });
+            }
+            return socket;
+        }
+        // Handle 407 Proxy Authentication Required
+        if (connect.statusCode === 407 && this.onProxyAuth) {
+            dist_debug('Got 407 response, invoking onProxyAuth callback');
+            socket.destroy();
+            const proxyAuthenticate = connect.headers['proxy-authenticate'] || '';
+            const scheme = Array.isArray(proxyAuthenticate)
+                ? proxyAuthenticate[0].split(/\s/)[0]
+                : proxyAuthenticate.split(/\s/)[0];
+            const authResponse = await this.onProxyAuth({
+                response: connect,
+                scheme,
+            });
+            // Retry with the auth headers
+            return this._connectWithAuth(req, opts, authResponse.headers);
+        }
+        // Some other status code that's not 200... need to re-play the HTTP
+        // header "data" events onto the socket once the HTTP machinery is
+        // attached so that the node core `http` can parse and handle the
+        // error status code.
+        // Close the original socket, and a new "fake" socket is returned
+        // instead, so that the proxy doesn't get the HTTP request
+        // written to it (which may contain `Authorization` headers or other
+        // sensitive data).
+        //
+        // See: https://hackerone.com/reports/541502
+        socket.destroy();
+        const fakeSocket = new external_net_.Socket({ writable: false });
+        fakeSocket.readable = true;
+        // Need to wait for the "socket" event to re-play the "data" events.
+        req.once('socket', (s) => {
+            dist_debug('Replaying proxy buffer for failed request');
+            external_assert_(s.listenerCount('data') > 0);
+            // Replay the "buffered" Buffer onto the fake `socket`, since at
+            // this point the HTTP module machinery has been hooked up for
+            // the user.
+            s.push(buffered);
+            s.push(null);
+        });
+        return fakeSocket;
+    }
+    /**
+     * Retry a CONNECT request with additional auth headers.
+     */
+    async _connectWithAuth(req, opts, authHeaders) {
+        const { proxy } = this;
+        let socket;
+        if (proxy.protocol === 'https:') {
+            socket = external_tls_.connect(setServernameFromNonIpHost(this.connectOpts));
+        }
+        else {
+            socket = external_net_.connect(this.connectOpts);
+        }
+        const headers = typeof this.proxyHeaders === 'function'
+            ? this.proxyHeaders()
+            : { ...this.proxyHeaders };
+        const host = external_net_.isIPv6(opts.host) ? `[${opts.host}]` : opts.host;
+        let payload = `CONNECT ${host}:${opts.port} HTTP/1.1\r\n`;
+        if (proxy.username || proxy.password) {
+            const auth = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
+            headers['Proxy-Authorization'] = `Basic ${Buffer.from(auth).toString('base64')}`;
+        }
+        // Merge auth headers (overrides existing)
+        Object.assign(headers, authHeaders);
+        headers.Host = `${host}:${opts.port}`;
+        if (!headers['Proxy-Connection']) {
+            headers['Proxy-Connection'] = this.keepAlive
+                ? 'Keep-Alive'
+                : 'close';
+        }
+        for (const name of Object.keys(headers)) {
+            payload += `${name}: ${headers[name]}\r\n`;
+        }
+        const proxyResponsePromise = parseProxyResponse(socket);
+        socket.write(`${payload}\r\n`);
+        const { connect } = await proxyResponsePromise;
+        req.emit('proxyConnect', connect);
+        this.emit('proxyConnect', connect, req);
+        if (connect.statusCode === 200) {
+            req.once('socket', resume);
+            if (opts.secureEndpoint) {
+                dist_debug('Upgrading socket connection to TLS');
+                return external_tls_.connect({
+                    ...omit(setServernameFromNonIpHost(opts), 'host', 'path', 'port'),
+                    socket,
+                });
+            }
+            return socket;
+        }
+        // If still not 200, throw
+        socket.destroy();
+        throw new Error(`Proxy authentication failed with status ${connect.statusCode} after retry`);
+    }
+}
+HttpsProxyAgent.protocols = ['http', 'https'];
+function resume(socket) {
+    // Defer the resume so that all 'socket' event handlers have a chance
+    // to attach their listeners (e.g. the HTTP client's 'data' handler)
+    // before data starts flowing. Without this, buffered proxy-response
+    // data can be emitted synchronously before listeners are ready.
+    // See: https://github.com/nicolo-ribaudo/tc39-proposal-await-dictionary/issues/7
+    setImmediate(() => {
+        socket.resume();
+    });
+}
+function omit(obj, ...keys) {
+    const ret = {};
+    let key;
+    for (key in obj) {
+        if (!keys.includes(key)) {
+            ret[key] = obj[key];
+        }
+    }
+    return ret;
+}
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+
+/***/ 16825:
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
+
+"use strict";
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   h: () => (/* binding */ createNegotiateAuth)
+/* harmony export */ });
+function createNegotiateAuth() {
+    return async ({ response, scheme }) => {
+        if (scheme.toLowerCase() !== 'negotiate') {
+            throw new Error(`Expected Negotiate scheme but got "${scheme}"`);
+        }
+        let kerberos;
+        try {
+            kerberos = await __nccwpck_require__.e(/* import() */ 50).then(__nccwpck_require__.t.bind(__nccwpck_require__, 98050, 19));
+        }
+        catch {
+            throw new Error('The "kerberos" package is required for Negotiate proxy authentication. ' +
+                'Install it with: npm install kerberos');
+        }
+        const proxyAuthenticate = response.headers['proxy-authenticate'] || '';
+        const challengeHeader = Array.isArray(proxyAuthenticate)
+            ? proxyAuthenticate[0]
+            : proxyAuthenticate;
+        const serverToken = typeof challengeHeader === 'string' && challengeHeader.includes(' ')
+            ? challengeHeader.split(' ').slice(1).join(' ')
+            : undefined;
+        const client = await kerberos.initializeClient('HTTP@proxy', {
+            mechOID: kerberos.GSS_MECH_OID_SPNEGO,
+        });
+        const token = await client.step(serverToken || '');
+        if (!token) {
+            throw new Error('Kerberos client.step() returned no token');
+        }
+        return {
+            headers: {
+                'Proxy-Authorization': `Negotiate ${token}`,
+            },
+        };
+    };
+}
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+
 /***/ 2822:
 /***/ ((module) => {
 
@@ -153027,6 +153775,36 @@ module.exports = /*#__PURE__*/JSON.parse('[[[0,44],"disallowed_STD3_valid"],[[45
 /******/ 	__nccwpck_require__.m = __webpack_modules__;
 /******/ 	
 /************************************************************************/
+/******/ 	/* webpack/runtime/create fake namespace object */
+/******/ 	(() => {
+/******/ 		var getProto = Object.getPrototypeOf ? (obj) => (Object.getPrototypeOf(obj)) : (obj) => (obj.__proto__);
+/******/ 		var leafPrototypes;
+/******/ 		// create a fake namespace object
+/******/ 		// mode & 1: value is a module id, require it
+/******/ 		// mode & 2: merge all properties of value into the ns
+/******/ 		// mode & 4: return value when already ns object
+/******/ 		// mode & 16: return value when it's Promise-like
+/******/ 		// mode & 8|1: behave like require
+/******/ 		__nccwpck_require__.t = function(value, mode) {
+/******/ 			if(mode & 1) value = this(value);
+/******/ 			if(mode & 8) return value;
+/******/ 			if(typeof value === 'object' && value) {
+/******/ 				if((mode & 4) && value.__esModule) return value;
+/******/ 				if((mode & 16) && typeof value.then === 'function') return value;
+/******/ 			}
+/******/ 			var ns = Object.create(null);
+/******/ 			__nccwpck_require__.r(ns);
+/******/ 			var def = {};
+/******/ 			leafPrototypes = leafPrototypes || [null, getProto({}), getProto([]), getProto(getProto)];
+/******/ 			for(var current = mode & 2 && value; typeof current == 'object' && !~leafPrototypes.indexOf(current); current = getProto(current)) {
+/******/ 				Object.getOwnPropertyNames(current).forEach((key) => (def[key] = () => (value[key])));
+/******/ 			}
+/******/ 			def['default'] = () => (value);
+/******/ 			__nccwpck_require__.d(ns, def);
+/******/ 			return ns;
+/******/ 		};
+/******/ 	})();
+/******/ 	
 /******/ 	/* webpack/runtime/define property getters */
 /******/ 	(() => {
 /******/ 		// define getter functions for harmony exports
@@ -153064,6 +153842,17 @@ module.exports = /*#__PURE__*/JSON.parse('[[[0,44],"disallowed_STD3_valid"],[[45
 /******/ 	/* webpack/runtime/hasOwnProperty shorthand */
 /******/ 	(() => {
 /******/ 		__nccwpck_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/make namespace object */
+/******/ 	(() => {
+/******/ 		// define __esModule on exports
+/******/ 		__nccwpck_require__.r = (exports) => {
+/******/ 			if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+/******/ 				Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+/******/ 			}
+/******/ 			Object.defineProperty(exports, '__esModule', { value: true });
+/******/ 		};
 /******/ 	})();
 /******/ 	
 /******/ 	/* webpack/runtime/node module decorator */
