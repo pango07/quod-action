@@ -91139,6 +91139,11 @@ async function main() {
   const base = path.dirname(configFile)
   const out = fs.mkdtempSync(path.join(base, 'managed-run-'))
   const cacheDir = path.join(base, 'managed-receipts')
+  const transport = []
+  const retainTransport = event => {
+    if (event) transport.push(event)
+    fs.writeFileSync(path.join(out, 'cache-transport.json'), JSON.stringify({schema: 'quod-managed-action-cache-v1', events: transport}, null, 2) + '\n')
+  }
   const {dispatchManaged} = await importRuntime(pathToFileURL(path.join(managed.runtime, 'dispatcher.mjs')).href)
   if (typeof dispatchManaged !== 'function') throw new Error('managed dispatcher export missing')
   dispatchStarted = true
@@ -91154,9 +91159,13 @@ async function main() {
         // The returned key is from the service, never a downloaded manifest.
         const matched = await withCacheAuth(cacheAuth, () => cache.restoreCache([dir], prefix + 'lookup', [prefix]))
         const digest = trustedDigest(matched, execution.key, managed.namespace)
+        retainTransport({operation: 'restore', executionKey: execution.key, prefix,
+          matchedServiceKey: matched || null, trustedReceiptSha256: digest,
+          file: path.join(dir, 'receipt.json')})
         if (!digest) return null
         return {file: path.join(dir, 'receipt.json'), trustedReceiptSha256: digest}
       } catch (error) {
+        retainTransport({operation: 'restore-error', executionKey: execution.key})
         console.error(`quod managed: receipt restore missed (${error.message})`)
         return null
       }
@@ -91169,9 +91178,16 @@ async function main() {
       fs.mkdirSync(dir, {recursive: true})
       fs.writeFileSync(path.join(dir, 'receipt.json'), bytes, {mode: 0o600})
       try {
-        await withCacheAuth(cacheAuth, () => cache.saveCache([dir], receiptPrefix(execution.key, managed.namespace) + receiptSha256))
-      } catch (error) { console.error(`quod managed: receipt not saved (${error.message})`) }
+        const key = receiptPrefix(execution.key, managed.namespace) + receiptSha256
+        const cacheId = await withCacheAuth(cacheAuth, () => cache.saveCache([dir], key))
+        retainTransport({operation: 'save', executionKey: execution.key, key, receiptSha256,
+          cacheId: Number.isSafeInteger(cacheId) ? cacheId : null})
+      } catch (error) {
+        retainTransport({operation: 'save-error', executionKey: execution.key})
+        console.error(`quod managed: receipt not saved (${error.message})`)
+      }
     }})
+  retainTransport()
   console.log(`QUOD_MANAGED_RESULT ${JSON.stringify({mode: result.mode, files: result.files.map(file => ({file: file.file, decision: file.decision})),
     hit: result.hit, managedExecutions: result.managedExecutions, fallback: result.fallback, exitCode: result.exitCode,
     effectsSha256: result.effectsSha256 || null, runtimeClassSha256: result.runtimeClassSha256 || null,
