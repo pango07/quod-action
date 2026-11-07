@@ -153515,7 +153515,7 @@ async function vitest(mode) {
   }
   fs.writeFileSync(
     paths.config,
-    JSON.stringify({ quod, mode, record, ledgers: paths.ledgers, reports: paths.reports, root: process.env.GITHUB_WORKSPACE, cloud, prefetch }),
+    JSON.stringify({ quod, mode, record, ledgers: paths.ledgers, reports: paths.reports, root: process.env.GITHUB_WORKSPACE, cloud, prefetch, deferCloudSave: true }),
     { mode: 0o600 },
   )
   return true

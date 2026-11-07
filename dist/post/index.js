@@ -90801,6 +90801,69 @@ ZipStream.prototype.finalize = function() {
 
 /***/ }),
 
+/***/ 62840:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+// Test reports remain inline. Ledger publication can wait until every test
+// command has finished, and overlap the Actions cache uploads in post.
+const fs = __nccwpck_require__(73024)
+const path = __nccwpck_require__(76760)
+const { spawn } = __nccwpck_require__(31421)
+
+function saveOne(cfg, dir, suite) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cfg.quod, ['vitest', '--dir', dir, '--cloud', '--suite', suite, '--cloud-only', 'save'], {
+      cwd: cfg.root,
+      env: { ...process.env, ...cfg.cloud, QUOD_SHIM_ACTIVE: '1' },
+      stdio: 'inherit',
+    })
+    child.once('error', reject)
+    child.once('close', (code, signal) => {
+      if (code === 0) resolve()
+      else reject(new Error(`Cloud ledger save exited ${signal || code}`))
+    })
+  })
+}
+
+async function saveCloudLedgers(base, run = saveOne) {
+  const dirty = path.join(base, 'cloud-recorded')
+  if (!fs.existsSync(dirty)) return 0
+  const cfg = JSON.parse(fs.readFileSync(path.join(base, 'config.json'), 'utf8'))
+  if (!cfg.cloud || cfg.deferCloudSave !== true) return 0
+  const ids = fs.readdirSync(dirty, { withFileTypes: true }).filter(e => e.isFile()).map(e => e.name).sort()
+  const errors = []
+  let next = 0, saved = 0
+  // Each CLI has its own bounded blob uploader; do not start an unbounded
+  // number of CLIs in a monorepo. Both workers finish before post returns.
+  await Promise.all(Array.from({ length: Math.min(2, ids.length) }, async () => {
+    for (;;) {
+      const id = ids[next++]
+      if (id === undefined) return
+      try {
+        if (!/^[A-Za-z0-9._-]+$/.test(id) || id === '.' || id === '..') throw new Error('invalid ledger directory name')
+        const dir = path.join(cfg.ledgers, id)
+        const name = path.join(cfg.ledgers, '.suites', id)
+        if (!fs.lstatSync(dir).isDirectory() || !fs.lstatSync(name).isFile()) throw new Error('ledger or suite is missing or not an ordinary file/directory')
+        const suite = fs.readFileSync(name, 'utf8')
+        await run(cfg, dir, suite)
+        fs.rmSync(path.join(dirty, id))
+        saved++
+      } catch (error) {
+        errors.push(error)
+      }
+    }
+  }))
+  if (errors.length) throw new Error(`${errors.length} Cloud ledger save(s) could not run: ${errors[0].message}`)
+  return saved
+}
+
+module.exports = { saveCloudLedgers }
+
+
+/***/ }),
+
 /***/ 65128:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -91029,6 +91092,14 @@ module.exports = require("net");
 
 "use strict";
 module.exports = require("node:buffer");
+
+/***/ }),
+
+/***/ 31421:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("node:child_process");
 
 /***/ }),
 
@@ -153068,6 +153139,7 @@ const path = __nccwpck_require__(76760)
 const { paths } = __nccwpck_require__(65128)
 const D = __nccwpck_require__(60563)
 const { saveTogether } = __nccwpck_require__(64723)
+const { saveCloudLedgers } = __nccwpck_require__(62840)
 
 // Credentials the job holds: none of their values may leave in a report
 // artifact or a cached ledger.
@@ -153155,9 +153227,9 @@ async function saveTests() {
     return
   }
   if (mode === 'check' && core.getState('record') === '1') {
-    // The ledger this job recorded, for the next job (Quod Cloud has it
-    // already when the job could use it; the cache is the fallback).
-    await saveLedger()
+    // Both destinations read the final ledger after the test commands.
+    // Cache fallback proceeds even if a Cloud save cannot run.
+    await saveRecordedTests()
     return
   }
   if (mode === 'check') {
@@ -153179,7 +153251,14 @@ async function saveTests() {
     core.info(`Quod: ${files.length} test reports for the shadow (${name})`)
     return
   }
-  if (mode === 'shadow') await saveLedger()
+  if (mode === 'shadow') await saveRecordedTests()
+}
+
+async function saveRecordedTests() {
+  const results = await saveTogether([saveLedger, () => saveCloudLedgers(paths.base)])
+  if (results[1].status === 'rejected') core.warning(`Quod: ${results[1].reason.message}`)
+  else if (results[1].value) core.info(`Quod: finished ${results[1].value} deferred Cloud ledger save(s)`)
+  if (results[0].status === 'rejected') throw results[0].reason
 }
 
 async function saveLedger() {
