@@ -40,8 +40,10 @@ jobs:
           test -f .build/runtime/dispatcher.mjs
           tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -C .build/runtime -czf dist/managed/runtime.tar.gz .
           node -e 'const fs=require("fs"),c=require("crypto");fs.writeFileSync("dist/managed/manifest.json",JSON.stringify({schema:"quod-managed-action-runtime-v1",source:require("./managed-source.json"),sha256:c.createHash("sha256").update(fs.readFileSync("dist/managed/runtime.tar.gz")).digest("hex")},null,2)+"\n")'
-      - name: Action regression checks
-        run: node --test src/*.test.js test/*-proof.mjs test/*-descriptor.mjs test/realpath.mjs test/recorder-upgrade.mjs test/lineage-cohort.mjs test/cloud-post.mjs
+      - name: Action unit regression checks
+        # test/*.mjs are packaged-CLI acceptance drivers. The Quod repository's
+        # benchmark-action gate supplies their fixture, hook and CLI arguments.
+        run: node --test src/*.test.js
       - name: Commit reviewed-branch build output
         run: |
           git add -f dist
