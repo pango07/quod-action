@@ -201,6 +201,16 @@ semantics of supported files: a declared epoch (default `1700000000000`), seed
 network or filesystem access. `managed-vitest: control` runs the same managed
 work without reading or writing receipts. The default is `off`.
 
+The pinned runtime now declares the separately keyed frozen Array/Promise slot
+policy. It retains seven native constructor, iterator, species, `then` and
+`resolve` slots before freezing their four constructor/prototype objects.
+Assignments that would shadow those inherited nonwritable properties on public
+instances or subclasses may fail; an own `Object.defineProperty` remains
+possible. The other capability and descriptor-mutation guards remain in force.
+This is an explicit managed execution contract, and earlier-policy receipts
+cannot be admitted under it. See the exact source pin's
+[`managed runtime contract`](https://github.com/pango07/quod/blob/293afb713a1ceab141f290db8a002728298cb5c0/docs/managed-vitest-action-v0.md).
+
 The first profile supports the expensive convex-helpers stream property test
 under its reviewed Vitest 5 configuration. Every original test still runs;
 remaining files and unsupported commands use ordinary Vitest. Preparation,
