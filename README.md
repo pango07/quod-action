@@ -129,9 +129,11 @@ In more detail, the action:
    branch, then the pull request's base, then the default branch). It puts a
    `node` shim first on `PATH`, and every one-shot `vitest run` in the job
    (through npm scripts, npx, turbo, pnpm or `node_modules/.bin`) becomes
-   `quod vitest` with the same arguments. After the job, it saves the
-   ledger: to Quod Cloud from quod itself, and to the Actions cache in a
-   post step.
+   `quod vitest` with the same arguments. Test reports reach Quod Cloud
+   after each command. After the job, the post step saves each changed
+   suite's final ledger to Quod Cloud alongside the Actions cache upload,
+   and waits for both. A job that replays everything does not upload the
+   ledger again.
 
 Each part fails open: if it can't set up, the job runs as it would without
 Quod.
