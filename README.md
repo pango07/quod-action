@@ -98,6 +98,9 @@ See the [support and evidence boundary](https://github.com/pango07/quod/blob/exp
   Files using `fs.fstat`, `fs.fstatSync` or `fs.promises.open` also run each
   time: descriptor metadata and `FileHandle` operations are not yet fully
   tracked. Ordinary pathname content reads can still replay.
+  Resolved paths include parent symlinks in their input key. Unsupported
+  `realpath` arguments, accessor/proxy options and resolution errors prevent
+  replay. See the [parent-symlink regression](https://github.com/pango07/quod/blob/probe/worker-arguments-codex/docs/bench/realpath-contract.md).
 - **Coverage** (`--coverage`, or `coverage.enabled` in the config, v8 or
   istanbul): each recorded file keeps its coverage; a replayed file's joins
   the files that ran, and vitest's own provider writes every report and
