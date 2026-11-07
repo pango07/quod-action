@@ -8,16 +8,22 @@ const {pathToFileURL} = require('node:url')
 const {spawnSync} = require('node:child_process')
 const cache = require('@actions/cache')
 const {receiptPrefix, trustedDigest} = require('./managed-cache')
+const {loadCacheAuth, withCacheAuth} = require('./managed-auth')
+// ncc rewrites ordinary dynamic import expressions into CommonJS require.
+// This loader deliberately retains Node's native ESM import for the separately
+// shipped, content-pinned runtime. No project source becomes loader code.
+const importRuntime = new Function('specifier', 'return import(specifier)')
 let dispatchStarted = false
 
 async function main() {
   const [configFile, vitestEntry, ...args] = process.argv.slice(2)
   const cfg = JSON.parse(fs.readFileSync(configFile, 'utf8'))
   const managed = cfg.managed
+  const cacheAuth = loadCacheAuth(managed.cacheAuth)
   const base = path.dirname(configFile)
   const out = fs.mkdtempSync(path.join(base, 'managed-run-'))
   const cacheDir = path.join(base, 'managed-receipts')
-  const {dispatchManaged} = await import(pathToFileURL(path.join(managed.runtime, 'dispatcher.mjs')).href)
+  const {dispatchManaged} = await importRuntime(pathToFileURL(path.join(managed.runtime, 'dispatcher.mjs')).href)
   if (typeof dispatchManaged !== 'function') throw new Error('managed dispatcher export missing')
   dispatchStarted = true
   const result = await dispatchManaged({project: cfg.root, out, cacheDir, args, vitestEntry,
@@ -30,7 +36,7 @@ async function main() {
       try {
         // Cache entries are immutable and scoped by GitHub's branch/ref rules.
         // The returned key is from the service, never a downloaded manifest.
-        const matched = await cache.restoreCache([dir], prefix + 'lookup', [prefix])
+        const matched = await withCacheAuth(cacheAuth, () => cache.restoreCache([dir], prefix + 'lookup', [prefix]))
         const digest = trustedDigest(matched, execution.key, managed.namespace)
         if (!digest) return null
         return {file: path.join(dir, 'receipt.json'), trustedReceiptSha256: digest}
@@ -47,7 +53,7 @@ async function main() {
       fs.mkdirSync(dir, {recursive: true})
       fs.writeFileSync(path.join(dir, 'receipt.json'), bytes, {mode: 0o600})
       try {
-        await cache.saveCache([dir], receiptPrefix(execution.key, managed.namespace) + receiptSha256)
+        await withCacheAuth(cacheAuth, () => cache.saveCache([dir], receiptPrefix(execution.key, managed.namespace) + receiptSha256))
       } catch (error) { console.error(`quod managed: receipt not saved (${error.message})`) }
     }})
   console.log(`QUOD_MANAGED_RESULT ${JSON.stringify({mode: result.mode, files: result.files.map(file => ({file: file.file, decision: file.decision})),

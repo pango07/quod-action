@@ -215,6 +215,11 @@ publisher is outside that scope. Fork pull requests do not publish receipts, and
 pull_request_target/workflow_run jobs never publish them. Quod Cloud is not used
 for this experimental receipt transport.
 
+The Action retains the runner's cache session in a private job-local file. The
+bridge exposes it only during cache SDK operations, restores its environment
+before ordinary children run, and the post step removes the file. Reports and
+receipt artifacts exclude that file and the Action configuration.
+
 `managed-epoch`, `managed-seed` and `managed-env` declare the keyed values.
 `cache-namespace` isolates both dependency and receipt storage for a cold run.
 The shipped Linux x64 runtime is built on GitHub from `managed-source.json` and

@@ -90,7 +90,7 @@
     process.exit(child.status ?? 1)
   }
 
-  if (!fs.existsSync(cfg.quod)) return
+  if (typeof cfg.quod !== 'string' || !fs.existsSync(cfg.quod)) return
 
   // One ledger per package and command line: where it runs (from the
   // repository root) and its arguments.
@@ -329,7 +329,7 @@ function npmUnit(bin, args) {
   } catch {
     return
   }
-  if (cfg.mode === 'shadow' || !cfg.root || !fs.existsSync(cfg.quod)) return
+  if (cfg.mode === 'shadow' || !cfg.root || typeof cfg.quod !== 'string' || !fs.existsSync(cfg.quod)) return
   const cwd = process.cwd()
   const root = cfg.root
   if (cwd !== root && !cwd.startsWith(`${root}${path.sep}`)) return

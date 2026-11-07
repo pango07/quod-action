@@ -5,7 +5,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
 const {spawnSync} = require('node:child_process')
-function fixture(t, dispatcher) {
+function fixture(t, dispatcher, bridge = path.join(__dirname, 'managed-bridge.js')) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'quod-managed-bridge-')))
   t.after(() => fs.rmSync(root, {recursive: true, force: true}))
   const runtime = path.join(root, 'runtime'), marker = path.join(root, 'ordinary-executed')
@@ -14,7 +14,7 @@ function fixture(t, dispatcher) {
   const entry = path.join(root, 'vitest.mjs'), config = path.join(root, 'config.json')
   fs.writeFileSync(entry, `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, 'ran'); process.exit(0)\n`)
   fs.writeFileSync(config, JSON.stringify({root, managed: {runtime, mode: 'v0', namespace: ''}}))
-  const command = spawnSync(process.execPath, [path.join(__dirname, 'managed-bridge.js'), config, entry, 'run'],
+  const command = spawnSync(process.execPath, [bridge, config, entry, 'run'],
     {env: {...process.env, QUOD_SHIM_ACTIVE: '1'}, encoding: 'utf8', timeout: 10000})
   assert(!command.error, command.error?.message)
   return {command, marker}
@@ -29,4 +29,12 @@ test('an unavailable dispatcher lets the original ordinary command execute', t =
   const {command, marker} = fixture(t, null)
   assert.equal(command.status, 0)
   assert.equal(fs.readFileSync(marker, 'utf8'), 'ran')
+})
+test('the actual ncc bundle retains native ESM loading and late-failure protection', t => {
+  const bridge = path.resolve(__dirname, '../dist/managed-bridge/index.js')
+  assert(fs.existsSync(bridge), 'build the actual Action on the runner before testing it')
+  const {command, marker} = fixture(t, 'export async function dispatchManaged(){throw new Error("bundled late failure")}\n', bridge)
+  assert.equal(command.status, 1)
+  assert.equal(fs.existsSync(marker), false)
+  assert.match(command.stderr, /dispatcher stopped \(bundled late failure\)/)
 })

@@ -27,6 +27,7 @@ jobs:
       - name: Install Action dependencies and build bundles
         run: |
           npm install --no-audit --no-fund
+          rm -rf dist/managed-bridge
           npm run build
       - name: Install pinned managed dependencies
         working-directory: .build/source/scripts/bench-vitest/managed

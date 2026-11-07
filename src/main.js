@@ -19,6 +19,7 @@ const path = require('node:path')
 const { execFileSync, spawn } = require('node:child_process')
 const { paths, scope, keys } = require('./common')
 const D = require('../deps.cjs')
+const {captureCacheAuth} = require('./managed-auth')
 
 // SHA-256 of each release's quod-linux-x86_64.tar.gz.
 const PINS = {
@@ -514,9 +515,14 @@ function installManaged(mode, managedMode) {
   execFileSync('tar', ['-xzf', path.join(dist, 'managed', 'runtime.tar.gz'), '-C', runtime])
   const bridge = path.join(dist, 'managed-bridge', 'index.js')
   if (!fs.existsSync(bridge) || !fs.existsSync(path.join(runtime, 'dispatcher.mjs'))) throw new Error('managed runtime incomplete')
+  const cacheAuth = path.join(paths.base, 'managed-cache-auth.json')
+  fs.rmSync(cacheAuth, {force: true})
+  captureCacheAuth(cacheAuth)
+  core.saveState('managed-auth', cacheAuth)
+  if (process.env.ACTIONS_RUNTIME_TOKEN) core.setSecret(process.env.ACTIONS_RUNTIME_TOKEN)
   core.info(`Quod managed Vitest ${managedMode}: epoch ${epoch}, seed ${seed}, explicit environment keys ${Object.keys(env).sort().join(', ')}; unsupported work runs ordinary Vitest`)
   return {mode: managedMode, runtime, bridge, epoch, seed, env,
-    write: maySave() && core.getInput('record') !== 'false', namespace: cacheNamespace(), source: manifest.source}
+    write: maySave() && core.getInput('record') !== 'false', namespace: cacheNamespace(), source: manifest.source, cacheAuth}
 }
 
 function cacheNamespace() {
