@@ -153213,6 +153213,8 @@ async function dependencies() {
 }
 
 async function run() {
+  const auth = core.getState('managed-auth')
+  if (auth && path.resolve(auth) === path.join(paths.base, 'managed-cache-auth.json')) fs.rmSync(auth, {force: true})
   if (core.getState('active') !== '1') return
   const results = await saveTogether([dependencies, saveTests])
   if (results[0].status === 'rejected') core.info(`Quod dependencies: not saved (${results[0].reason.message})`)

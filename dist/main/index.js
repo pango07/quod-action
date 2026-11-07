@@ -90872,6 +90872,48 @@ module.exports = { paths, scope, keys }
 
 /***/ }),
 
+/***/ 96755:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+// The runner gives its cache session to JavaScript actions, not later shell
+// steps. Keep the session in a private job-local file; never export or cache it.
+const fs = __nccwpck_require__(73024)
+const KEYS = ['ACTIONS_RUNTIME_TOKEN', 'ACTIONS_CACHE_URL', 'ACTIONS_RESULTS_URL',
+  'ACTIONS_CACHE_SERVICE_V2', 'ACTIONS_RUNTIME_URL']
+function captureCacheAuth(file, environment = process.env) {
+  const data = Object.fromEntries(KEYS.filter(key => typeof environment[key] === 'string').map(key => [key, environment[key]]))
+  fs.writeFileSync(file, JSON.stringify(data), {mode: 0o600, flag: 'wx'})
+}
+function loadCacheAuth(file) {
+  if (!file) return {}
+  const data = JSON.parse(fs.readFileSync(file, 'utf8'))
+  if (!data || typeof data !== 'object' || Array.isArray(data) ||
+      Object.entries(data).some(([key, value]) => !KEYS.includes(key) || typeof value !== 'string')) {
+    throw new Error('invalid managed cache session')
+  }
+  return data
+}
+async function withCacheAuth(auth, operation) {
+  const previous = KEYS.map(key => [key, Object.hasOwn(process.env, key), process.env[key]])
+  try {
+    for (const key of KEYS) {
+      if (Object.hasOwn(auth, key)) process.env[key] = auth[key]
+    }
+    return await operation()
+  } finally {
+    for (const [key, present, value] of previous) {
+      if (present) process.env[key] = value
+      else delete process.env[key]
+    }
+  }
+}
+module.exports = {captureCacheAuth, loadCacheAuth, withCacheAuth}
+
+
+/***/ }),
+
 /***/ 42078:
 /***/ ((module) => {
 
@@ -153068,6 +153110,7 @@ const path = __nccwpck_require__(76760)
 const { execFileSync, spawn } = __nccwpck_require__(31421)
 const { paths, scope, keys } = __nccwpck_require__(65128)
 const D = __nccwpck_require__(60563)
+const {captureCacheAuth} = __nccwpck_require__(96755)
 
 // SHA-256 of each release's quod-linux-x86_64.tar.gz.
 const PINS = {
@@ -153563,9 +153606,14 @@ function installManaged(mode, managedMode) {
   execFileSync('tar', ['-xzf', path.join(dist, 'managed', 'runtime.tar.gz'), '-C', runtime])
   const bridge = path.join(dist, 'managed-bridge', 'index.js')
   if (!fs.existsSync(bridge) || !fs.existsSync(path.join(runtime, 'dispatcher.mjs'))) throw new Error('managed runtime incomplete')
+  const cacheAuth = path.join(paths.base, 'managed-cache-auth.json')
+  fs.rmSync(cacheAuth, {force: true})
+  captureCacheAuth(cacheAuth)
+  core.saveState('managed-auth', cacheAuth)
+  if (process.env.ACTIONS_RUNTIME_TOKEN) core.setSecret(process.env.ACTIONS_RUNTIME_TOKEN)
   core.info(`Quod managed Vitest ${managedMode}: epoch ${epoch}, seed ${seed}, explicit environment keys ${Object.keys(env).sort().join(', ')}; unsupported work runs ordinary Vitest`)
   return {mode: managedMode, runtime, bridge, epoch, seed, env,
-    write: maySave() && core.getInput('record') !== 'false', namespace: cacheNamespace(), source: manifest.source}
+    write: maySave() && core.getInput('record') !== 'false', namespace: cacheNamespace(), source: manifest.source, cacheAuth}
 }
 
 function cacheNamespace() {
