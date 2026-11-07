@@ -10,10 +10,13 @@ const fixture = 'tests/env-descriptor.test.js'
 const originalConfig = fs.existsSync(config) ? fs.readFileSync(config) : null
 assert.equal(fs.existsSync(fixture), false, 'fixture must not replace an existing test')
 const logs = path.join(process.env.RUNNER_TEMP, 'env-descriptor-logs')
+const report = path.join(process.env.RUNNER_TEMP, 'env-descriptor-report.json')
 fs.mkdirSync(logs, {recursive:true})
 const runs = []
 function run(label, value, plain = false) {
-  const report = path.join(logs, `${label}-report.json`)
+  // The preload adds this output path to Vitest's arguments, which are
+  // part of the cache key. Keep it constant across the warm-up and mutation.
+  fs.rmSync(report, {force:true})
   const env = {...process.env,
     CACHE_DESCRIPTOR_INPUT:value,
     QUOD_VITEST_LINEAGE:'0', QUOD_VITEST_TIMING:'off',
@@ -27,6 +30,7 @@ function run(label, value, plain = false) {
   fs.writeFileSync(path.join(logs, `${label}.log`), log)
   assert.equal(out.error, undefined)
   assert.ok(out.status === 0 || out.status === 1, log)
+  fs.copyFileSync(report, path.join(logs, `${label}-report.json`))
   const states = JSON.parse(fs.readFileSync(report)).testResults.flatMap(f =>
     f.assertionResults.map(a => [a.fullName, a.status])).sort()
   assert.equal(states.length, 2, 'both descriptor tests must be reported')
