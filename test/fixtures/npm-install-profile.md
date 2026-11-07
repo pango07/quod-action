@@ -21,7 +21,8 @@ decline all dependency-tree restore/save authority when root binding.gyp
 exists or package-lock and npm-shrinkwrap coexist, including dangling
 symlinks; native npm ci runs. Default-off legacy behavior stays unchanged.
 
-The profile remains limited to managed v0/control in check mode on Linux
+The profile remains limited to explicit managed v0/control or the separate
+matrix-research/matrix-control modes in check mode on Linux
 x64. It does not supply build, module resolution, test, receipt, or absent
 dependency authority. A hit still restores node_modules and requires the
 existing install marker, arguments, tool/config/environment key, and

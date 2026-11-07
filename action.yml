@@ -14,10 +14,15 @@ branding:
 inputs:
   managed-vitest:
     description: >
-      off (default), v0, or control. v0 explicitly opts supported Vitest files
+      off (default), v0, control, matrix-research, or matrix-control. v0 opts supported Vitest files
       into Quod's managed clock, random seed, environment and capability policy.
       Unsupported files run ordinary Vitest. control uses the same managed
-      execution without receipt reads or writes. Experimental; Linux x64 only.
+      execution without receipt reads or writes. matrix-research is a separate
+      finite-profile investigation for exact root vitest run, with authenticated
+      input proofs and full logical project/file/name/state reports; arbitrary
+      reporter options run ordinary. matrix-control disables its receipt reads
+      and writes. No native timing/report-metadata reconstruction is claimed.
+      Experimental; Linux x64 only.
     required: false
     default: 'off'
   managed-epoch:

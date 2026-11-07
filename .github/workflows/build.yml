@@ -33,6 +33,7 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           rm -rf dist/managed-bridge
+          rm -rf dist/matrix-bridge
           npm run build
       - name: Install pinned managed dependencies
         working-directory: .build/source/scripts/bench-vitest/managed
@@ -44,6 +45,11 @@ jobs:
           cp .build/source/scripts/bench-vitest/managed/package*.json .build/runtime/
           cp -a .build/source/scripts/bench-vitest/managed/node_modules .build/runtime/
           test -f .build/runtime/dispatcher.mjs
+          test -f .build/runtime/matrix-input-dispatcher.mjs
+          test -f .build/runtime/resolved-compile-certificate.mjs
+          test -f .build/runtime/matrix-candidate-envelope.mjs
+          test -f .build/runtime/matrix-receipt.mjs
+          test -f .build/runtime/matrix-native.mjs
           tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -C .build/runtime -czf dist/managed/runtime.tar.gz .
           node -e 'const fs=require("fs"),c=require("crypto");fs.writeFileSync("dist/managed/manifest.json",JSON.stringify({schema:"quod-managed-action-runtime-v1",source:require("./managed-source.json"),sha256:c.createHash("sha256").update(fs.readFileSync("dist/managed/runtime.tar.gz")).digest("hex")},null,2)+"\n")'
       - name: Action unit regression checks

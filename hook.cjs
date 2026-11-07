@@ -32,6 +32,29 @@
     return
   }
   if (!entry.endsWith(`${path.sep}node_modules${path.sep}vitest${path.sep}vitest.mjs`)) return
+  let cfg
+  try {
+    cfg = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'))
+  } catch {
+    return
+  }
+  if (['matrix-research', 'matrix-control'].includes(cfg.managed?.mode)) {
+    // Any other Vitest selection/reporting mode remains the original command.
+    // Consume only our setup file before leaving it to native test execution.
+    const session = path.join(__dirname, 'managed-cache-auth.json')
+    const consume = () => {
+      if (cfg.managed.cacheAuth === session) fs.rmSync(session, {force: true})
+    }
+    let supported = false
+    try {
+      const original = argv.slice(2)
+      supported = cfg.mode === 'check' && !process.versions.pnp && original.length === 1 && original[0] === 'run' &&
+        fs.realpathSync(process.cwd()) === fs.realpathSync(cfg.root) &&
+        JSON.parse(fs.readFileSync(path.join(path.dirname(entry), 'package.json'), 'utf8')).version === '5.0.0'
+    } catch {}
+    if (!supported) {consume(); return}
+    if (cfg.managed.cacheAuth !== session || !fs.existsSync(session)) return
+  }
   // One-shot runs only: `vitest run ...`, or `vitest ...` where vitest runs
   // once (CI). Watch mode, other commands and what quod cannot replay
   // (snapshot updates, the UI, browser mode, shards, changed-file filters)
@@ -43,13 +66,6 @@
   else if (!env.CI || ['watch', 'dev', 'related', 'bench', 'typecheck', 'list', 'init'].includes(args[0])) return
   const plain = /^(-w|--watch|--ui|--browser|-u|--update|--merge-reports|--shard|--changed|--standalone|--inspect|--inspect-brk|--typecheck)(\.|=|$)/
   if (args.some((a) => plain.test(a))) return
-
-  let cfg
-  try {
-    cfg = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'))
-  } catch {
-    return
-  }
 
   // What quod cannot record runs as plain vitest, untouched (no quod process
   // at all): yarn Plug'n'Play (vitest and the dependencies in zip archives),
@@ -84,6 +100,8 @@
       [cfg.managed.bridge, path.join(__dirname, 'config.json'), entry, ...argv.slice(2)],
       {stdio: 'inherit', env: {...env, QUOD_SHIM_ACTIVE: '1'}})
     if (child.error) {
+      if (['matrix-research', 'matrix-control'].includes(cfg.managed.mode) &&
+          cfg.managed.cacheAuth === path.join(__dirname, 'managed-cache-auth.json')) fs.rmSync(cfg.managed.cacheAuth, {force: true})
       console.error(`quod managed: could not start (${child.error.message}); running ordinary Vitest`)
       return
     }

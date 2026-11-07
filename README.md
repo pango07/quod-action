@@ -235,3 +235,38 @@ receipt artifacts exclude that file and the Action configuration.
 The shipped Linux x64 runtime is built on GitHub from `managed-source.json` and
 its archive digest is verified before extraction. See the pinned source's
 managed runtime contract and benchmark evidence before interpreting savings.
+
+### Matrix research draft
+
+The separate `managed-vitest: matrix-research` profile is a draft awaiting its
+reviewed runtime source pin and packaged GitHub build. `matrix-control` runs the
+same investigation without receipt reads or writes. Neither changes the default
+`off` mode or the v0 API. Only the exact repository-root `vitest run` command
+under the finite reviewed Vitest5 configuration enters this profile. File,
+project, test, coverage, reporter and output options execute the original
+ordinary command. The npm script and its following release tests stay intact.
+
+The profile freshly resolves actual project/file/pool instances and validates
+current input proofs before independently admitting authenticated full execution
+receipts. Unknown or unsupported instances run in one exact native batch.
+Supported failures stay failures, and a failed whole command publishes no pack.
+One branch-scoped collection restore and at most one acknowledged save carry the
+bounded current candidate envelopes; embedded hashes are not cache authority.
+
+The full report is an explicit logical names/states document, retaining actual
+project multiplicity, duplicate names, skips and the final exit status. Its
+schema is `quod-managed-matrix-input-logical-results-v1`, exposed by the distinct
+`QUOD_MANAGED_MATRIX_INPUT_RESULT` log marker and the post artifact named
+`quod-managed-matrix-logical-*`. Native JSON describes only the native subset;
+it is not a full-suite report. Native timing and arbitrary reporter metadata are
+not reconstructed. The reviewed108 candidate profile still executes12 native
+instances, so `fullJobHit` remains false. No new controlled speedup is claimed.
+
+The Action setup session remains available during earlier trusted install/build
+steps in this finite public workflow. It is consumed before intercepted Vitest
+dispatch and exists only in parent memory during awaited SDK operations.
+Unsupported Vitest invocations consume the owned setup file before proceeding
+ordinary; later invocations execute ordinary once it has been consumed. This is
+not isolation from a hostile same-UID native workflow. Off/v0 retain their own
+existing behavior. The proven finite npm install equivalence remains a separate
+dependency-materialization decision and never supplies test/build authority.

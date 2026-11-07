@@ -329,7 +329,7 @@ function treePrint(root) {
 const NPM_CI = ['ci', 'clean-install', 'ic', 'install-clean', 'isntall-clean']
 
 function selectInstallProfile(root, info, managedMode) {
-  if (!['v0', 'control'].includes(managedMode)) return null
+  if (!['v0', 'control', 'matrix-research', 'matrix-control'].includes(managedMode)) return null
   return installProfile.select(root, info, managedMode, manifests(root))
 }
 

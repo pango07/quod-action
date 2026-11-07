@@ -1,5 +1,5 @@
 'use strict'
-// A finite npm-ci install equivalence, used only by managed v0/control.
+// A finite npm-ci install equivalence, used only by explicit managed modes.
 // These exact public convex-helpers inputs were reviewed for the original
 // twelve-commit window. This is not build, module-resolution or test authority:
 // those consumers must still observe the complete package.json and sources.
@@ -81,7 +81,7 @@ function project(root, info, requested, manifests) {
 }
 
 function select(root, info, mode, manifests) {
-  return ['v0', 'control'].includes(mode) && project(root, info, ID, manifests) ? ID : null
+  return ['v0', 'control', 'matrix-research', 'matrix-control'].includes(mode) && project(root, info, ID, manifests) ? ID : null
 }
 
 module.exports = {ID, select, project}

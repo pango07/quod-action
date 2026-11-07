@@ -12,10 +12,11 @@ const { paths } = require('./common')
 const D = require('../deps.cjs')
 const { saveTogether } = require('./saves')
 const { saveCloudLedgers } = require('./cloud-save')
+const {uploadMatrixReports} = require('./matrix-reports')
 
 // Credentials the job holds: none of their values may leave in a report
 // artifact or a cached ledger.
-const CREDENTIALS = ['ACTIONS_ID_TOKEN_REQUEST_TOKEN', 'ACTIONS_ID_TOKEN_REQUEST_URL', 'ACTIONS_RUNTIME_TOKEN', 'ACTIONS_RESULTS_URL', 'QUOD_SERVER_TOKEN']
+const CREDENTIALS = ['ACTIONS_ID_TOKEN_REQUEST_TOKEN', 'ACTIONS_ID_TOKEN_REQUEST_URL', 'ACTIONS_RUNTIME_TOKEN', 'ACTIONS_CACHE_URL', 'ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_URL', 'QUOD_SERVER_TOKEN']
 function leaks(files) {
   const secrets = CREDENTIALS.map((k) => [k, process.env[k]]).filter(([, v]) => v && v.length >= 16)
   const task = core.getState('task-token')
@@ -95,6 +96,11 @@ async function run() {
 
 async function saveTests() {
   const mode = core.getState('mode')
+  if (core.getState('managed-matrix') === '1') return uploadMatrixReports({
+    directory: path.join(paths.base, 'matrix-reports'), job: process.env.GITHUB_JOB,
+    attempt: process.env.GITHUB_RUN_ATTEMPT, client: new DefaultArtifactClient(), leaks,
+    info: value => core.info(value), warning: value => core.warning(value),
+  })
   if (core.getState('vitest') !== '1') {
     // main said why (a failed quod install, an unsupported runner, ...).
     core.info('Quod was off for vitest in this job (see the quod step): tests ran as plain vitest; nothing recorded, nothing saved')

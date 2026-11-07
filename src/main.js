@@ -134,7 +134,7 @@ async function dependencies(facts) {
   const info = D.detect(root)
   const t0 = Date.now()
   const managedMode = core.getInput('managed-vitest') || 'off'
-  if (info.pm === 'npm' && ['v0', 'control'].includes(managedMode)) {
+  if (info.pm === 'npm' && ['v0', 'control', 'matrix-research', 'matrix-control'].includes(managedMode)) {
     const present = name => {
       try { fs.lstatSync(path.join(root, name)); return true }
       catch (error) { if (error.code === 'ENOENT') return false; throw error }
@@ -146,7 +146,7 @@ async function dependencies(facts) {
       return null
     }
   }
-  const installProfile = ['v0', 'control'].includes(managedMode) && (core.getInput('mode') || 'check') === 'check' && process.platform === 'linux' && process.arch === 'x64'
+  const installProfile = ['v0', 'control', 'matrix-research', 'matrix-control'].includes(managedMode) && (core.getInput('mode') || 'check') === 'check' && process.platform === 'linux' && process.arch === 'x64'
     ? D.selectInstallProfile(root, info, managedMode) : null
   const key = D.key(root, info, facts, process.env, installProfile)
   const os = `${process.platform}-${process.arch}`
@@ -357,12 +357,13 @@ async function vitest(mode) {
   }
   const s = scope()
   const managedMode = core.getInput('managed-vitest') || 'off'
-  if (!['off', 'v0', 'control'].includes(managedMode)) throw new Error('managed-vitest must be off, v0, or control')
+  if (!['off', 'v0', 'control', 'matrix-research', 'matrix-control'].includes(managedMode)) throw new Error('managed-vitest must be off, v0, control, matrix-research, or matrix-control')
   const managed = managedMode === 'off' ? null : installManaged(mode, managedMode)
   if (managed) {
     // Managed receipts have their own transport and supervisor. The ordinary
     // Quod binary/Cloud ledger do not participate in this explicit profile.
     core.saveState('record', '')
+    if (managedMode.startsWith('matrix-')) core.saveState('managed-matrix', '1')
     fs.mkdirSync(paths.reports, {recursive: true})
     fs.writeFileSync(paths.config, JSON.stringify({quod: null, mode, record: false,
       reports: paths.reports, root: process.env.GITHUB_WORKSPACE, managed}), {mode: 0o600})
@@ -533,16 +534,21 @@ function installManaged(mode, managedMode) {
   fs.rmSync(runtime, {recursive: true, force: true})
   fs.mkdirSync(runtime, {recursive: true})
   execFileSync('tar', ['-xzf', path.join(dist, 'managed', 'runtime.tar.gz'), '-C', runtime])
-  const bridge = path.join(dist, 'managed-bridge', 'index.js')
-  if (!fs.existsSync(bridge) || !fs.existsSync(path.join(runtime, 'dispatcher.mjs'))) throw new Error('managed runtime incomplete')
+  const matrix = managedMode.startsWith('matrix-')
+  const bridge = path.join(dist, matrix ? 'matrix-bridge' : 'managed-bridge', 'index.js')
+  const required = matrix ? ['matrix-input-dispatcher.mjs', 'resolved-compile-certificate.mjs',
+    'matrix-candidate-envelope.mjs', 'matrix-receipt.mjs', 'matrix-native.mjs'] : ['dispatcher.mjs']
+  if (!fs.existsSync(bridge) || required.some(file => !fs.existsSync(path.join(runtime, file)))) throw new Error('managed runtime incomplete')
   const cacheAuth = path.join(paths.base, 'managed-cache-auth.json')
   fs.rmSync(cacheAuth, {force: true})
   captureCacheAuth(cacheAuth)
   core.saveState('managed-auth', cacheAuth)
   if (process.env.ACTIONS_RUNTIME_TOKEN) core.setSecret(process.env.ACTIONS_RUNTIME_TOKEN)
   core.info(`Quod managed Vitest ${managedMode}: epoch ${epoch}, seed ${seed}, explicit environment keys ${Object.keys(env).sort().join(', ')}; unsupported work runs ordinary Vitest`)
+  if (matrix) core.info('Quod matrix research accepts only root vitest run; reports logical names/states with exact native nonhits. The setup session is consumed before Vitest dispatch; earlier install/build steps remain trusted. Later Vitest commands run ordinary after that session is consumed.')
   return {mode: managedMode, runtime, bridge, epoch, seed, env,
-    write: maySave() && core.getInput('record') !== 'false', namespace: cacheNamespace(), source: manifest.source, cacheAuth}
+    write: maySave() && core.getInput('record') !== 'false', namespace: cacheNamespace(), source: manifest.source,
+    archiveSha256: manifest.sha256, cacheAuth}
 }
 
 function cacheNamespace() {

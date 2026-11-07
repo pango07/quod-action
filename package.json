@@ -4,7 +4,7 @@
   "description": "Quod for vitest in GitHub Actions: one line in your CI job",
   "license": "Apache-2.0",
   "scripts": {
-    "build": "ncc build src/main.js -o dist/main && ncc build src/post.js -o dist/post && ncc build src/managed-bridge.js -o dist/managed-bridge"
+    "build": "ncc build src/main.js -o dist/main && ncc build src/post.js -o dist/post && ncc build src/managed-bridge.js -o dist/managed-bridge && ncc build src/matrix-bridge.js -o dist/matrix-bridge"
   },
   "dependencies": {
     "@actions/artifact": "^2.3.2",
