@@ -134,6 +134,18 @@ async function dependencies(facts) {
   const info = D.detect(root)
   const t0 = Date.now()
   const managedMode = core.getInput('managed-vitest') || 'off'
+  if (info.pm === 'npm' && ['v0', 'control'].includes(managedMode)) {
+    const present = name => {
+      try { fs.lstatSync(path.join(root, name)); return true }
+      catch (error) { if (error.code === 'ENOENT') return false; throw error }
+    }
+    const reason = present('binding.gyp') ? 'root binding.gyp can add an implicit install'
+      : present('package-lock.json') && present('npm-shrinkwrap.json') ? 'npm-shrinkwrap.json overrides package-lock.json' : null
+    if (reason) {
+      core.info(`Quod managed dependencies: ${reason}; no dependency tree is restored or saved, and native npm ci runs`)
+      return null
+    }
+  }
   const installProfile = ['v0', 'control'].includes(managedMode) && (core.getInput('mode') || 'check') === 'check' && process.platform === 'linux' && process.arch === 'x64'
     ? D.selectInstallProfile(root, info, managedMode) : null
   const key = D.key(root, info, facts, process.env, installProfile)

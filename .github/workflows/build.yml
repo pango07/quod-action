@@ -2,11 +2,16 @@
 name: build
 on:
   workflow_dispatch:
+    inputs:
+      npm-install-equivalence:
+        description: Run only the finite real npm-ci materialization gate
+        type: boolean
+        default: false
 permissions:
   contents: write
 jobs:
   build:
-    if: startsWith(github.ref, 'refs/heads/exp/')
+    if: startsWith(github.ref, 'refs/heads/exp/') && !inputs['npm-install-equivalence']
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -51,3 +56,27 @@ jobs:
           if git diff --cached --quiet; then exit 0; fi
           git -c user.name="OpenAI Codex" -c user.email="juliovaught@yahoo.com" commit -m "Build optional managed Vitest Action at ${GITHUB_SHA::7}" -m "Co-Authored-By: OpenAI Codex <noreply@openai.com>"
           git push origin "HEAD:${GITHUB_REF_NAME}"
+  npm-install-equivalence:
+    if: github.ref == 'refs/heads/exp/npm-install-equivalence-sol-ultra' && inputs['npm-install-equivalence']
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24.18.0'
+      - name: Inventory and normalization regression checks
+        run: node --test src/*.test.js test/npm-install-equivalence.test.mjs
+      - name: Compare eight real npm-ci tuples and an independent baseline repeat
+        run: node test/npm-install-equivalence.mjs "$RUNNER_TEMP/npm-install-equivalence"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: npm-install-equivalence
+          path: ${{ runner.temp }}/npm-install-equivalence/
+          if-no-files-found: error
+          retention-days: 7

@@ -183,6 +183,38 @@ test('main selects the profile only for the explicit supported managed modes', a
   assert.equal(selected[0], selected[1], 'replay and control have the same install policy')
 })
 
+test('managed binding.gyp and competing shrinkwrap decline all dependency-tree authority while off stays legacy', async t => {
+  const f = fixture(t)
+  const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8')
+  const source = main.slice(main.indexOf('async function dependencies('), main.indexOf('\n// The task cache:'))
+  const variants = [
+    () => fs.writeFileSync(path.join(f.root, 'binding.gyp'), '{}'),
+    () => fs.symlinkSync('missing-gyp', path.join(f.root, 'binding.gyp')),
+    () => fs.writeFileSync(path.join(f.root, 'npm-shrinkwrap.json'), '{}'),
+    () => fs.symlinkSync('missing-shrinkwrap', path.join(f.root, 'npm-shrinkwrap.json')),
+  ]
+  for (const update of variants) for (const mode of ['v0', 'control', 'off']) {
+    f.write(0); update()
+    const restores = [], states = [], messages = []
+    const result = await vm.runInNewContext(source + '; dependencies(' + JSON.stringify(f.facts) + ')', {
+      D: mode === 'off' ? D : {...D, key: () => { throw new Error('a declined managed install must not compute a cache key') }},
+      fs, path, crypto, Date, process: {platform: 'linux', arch: 'x64', env: {...f.env, GITHUB_WORKSPACE: f.root}, cwd: () => f.root},
+      core: {getInput: name => name === 'managed-vitest' ? mode : '', info: value => messages.push(value), saveState: (...args) => states.push(args)},
+      cache: {restoreCache: async (...args) => { restores.push(args); return undefined }},
+      cacheNamespace: () => 'fixture-', maySave: () => true, home: () => f.base,
+    })
+    if (mode === 'off') {
+      assert.equal(result.key, legacy.key(f.root, info, f.facts, f.env))
+      assert.equal(restores.length, 2); assert.equal(states.length, 1)
+      assert.equal(result.installProfile, undefined)
+    } else {
+      assert.equal(result, null)
+      assert.deepEqual(restores, []); assert.deepEqual(states, [])
+      assert.match(messages.join('\n'), /no dependency tree is restored or saved, and native npm ci runs/)
+    }
+  }
+})
+
 function invokeHook(f, {tree = true, marker = true, mutate, args = ['ci']} = {}) {
   f.write(0)
   const base = path.join(f.base, 'hook'), npm = path.join(base, 'npm'), bin = path.join(npm, 'bin/npm-cli.js')

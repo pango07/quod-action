@@ -15,8 +15,11 @@ does not consume those differences to materialize node_modules in this
 reviewed profile. All remaining root package fields and lock entries stay
 in the key. c10 and c11 change dependencies and remain separate install
 classes. Unknown bytes or root/lock pairings, local dependencies,
-workspaces, install lifecycle scripts, an implicit binding.gyp install,
-and unexpected manifests decline to the original key and paths.
+workspaces, install lifecycle scripts, and unexpected manifests decline
+to the original key and paths. Explicit managed v0/control additionally
+decline all dependency-tree restore/save authority when root binding.gyp
+exists or package-lock and npm-shrinkwrap coexist, including dangling
+symlinks; native npm ci runs. Default-off legacy behavior stays unchanged.
 
 The profile remains limited to managed v0/control in check mode on Linux
 x64. It does not supply build, module resolution, test, receipt, or absent
