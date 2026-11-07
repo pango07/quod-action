@@ -95,6 +95,9 @@ See the [support and evidence boundary](https://github.com/pango07/quod/blob/exp
 - **Always runs:** failed or quarantined files and work the recorder marks
   unobservable. Network, child processes and filesystem effects have separate
   recording restrictions; their presence is not a blanket replay guarantee.
+  Files using `fs.fstat`, `fs.fstatSync` or `fs.promises.open` also run each
+  time: descriptor metadata and `FileHandle` operations are not yet fully
+  tracked. Ordinary pathname content reads can still replay.
 - **Coverage** (`--coverage`, or `coverage.enabled` in the config, v8 or
   istanbul): each recorded file keeps its coverage; a replayed file's joins
   the files that ran, and vitest's own provider writes every report and
