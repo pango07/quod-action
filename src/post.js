@@ -11,6 +11,7 @@ const path = require('node:path')
 const { paths } = require('./common')
 const D = require('../deps.cjs')
 const { saveTogether } = require('./saves')
+const { saveCloudLedgers } = require('./cloud-save')
 
 // Credentials the job holds: none of their values may leave in a report
 // artifact or a cached ledger.
@@ -98,9 +99,9 @@ async function saveTests() {
     return
   }
   if (mode === 'check' && core.getState('record') === '1') {
-    // The ledger this job recorded, for the next job (Quod Cloud has it
-    // already when the job could use it; the cache is the fallback).
-    await saveLedger()
+    // Both destinations read the final ledger after the test commands.
+    // Cache fallback proceeds even if a Cloud save cannot run.
+    await saveRecordedTests()
     return
   }
   if (mode === 'check') {
@@ -122,7 +123,14 @@ async function saveTests() {
     core.info(`Quod: ${files.length} test reports for the shadow (${name})`)
     return
   }
-  if (mode === 'shadow') await saveLedger()
+  if (mode === 'shadow') await saveRecordedTests()
+}
+
+async function saveRecordedTests() {
+  const results = await saveTogether([saveLedger, () => saveCloudLedgers(paths.base)])
+  if (results[1].status === 'rejected') core.warning(`Quod: ${results[1].reason.message}`)
+  else if (results[1].value) core.info(`Quod: finished ${results[1].value} deferred Cloud ledger save(s)`)
+  if (results[0].status === 'rejected') throw results[0].reason
 }
 
 async function saveLedger() {

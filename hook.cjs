@@ -93,13 +93,17 @@
   const where = rel === 'root' ? '.' : rel
   const suite = args.length ? `${where} ${args.join(' ')}` : where
   const cloud = cfg.cloud ? ['--cloud', '--suite', suite] : []
+  // The matching post bundle waits for these saves alongside the cache
+  // saves. Old configs keep the original inline-save behavior.
+  let deferredCloud = !!cfg.cloud && cfg.deferCloudSave === true && (cfg.record || cfg.mode === 'shadow')
   // Which suite each ledger directory is (travels with the cache's copy):
   // the next job's background restore names the suites by it.
   try {
     const names = path.join(cfg.ledgers, '.suites')
     fs.mkdirSync(names, { recursive: true })
     fs.writeFileSync(path.join(names, id), suite)
-  } catch {}
+  } catch { deferredCloud = false }
+  if (deferredCloud) cloud.push('--cloud-no-save')
   // The action started this suite's restore in the background: wait for it
   // (quod then uses what it restored), at most 2 minutes; then stop it, so
   // quod's own restore never shares the directory with it.
@@ -142,15 +146,30 @@
   }
   // Whether this run recorded anything (a full replay emitted records
   // nothing): the post step saves the ledger only if one did.
+  let changed = cfg.mode === 'shadow'
   if (cfg.record && cfg.mode !== 'shadow') {
     let fast = false
     try {
       fast = JSON.parse(fs.readFileSync(`${report}.summary`, 'utf8')).fast === true
     } catch {}
     if (!fast) {
+      changed = true
       try {
         fs.writeFileSync(path.join(__dirname, 'recorded'), '')
       } catch {}
+    }
+  }
+  if (deferredCloud && changed) {
+    try {
+      const dirty = path.join(__dirname, 'cloud-recorded')
+      fs.mkdirSync(dirty, { recursive: true })
+      fs.writeFileSync(path.join(dirty, id), '')
+    } catch {
+      // Losing the post marker must not lose the original save attempt.
+      console.error('quod: could not queue the Cloud ledger save; saving it now')
+      require('node:child_process').spawnSync(cfg.quod,
+        ['vitest', '--dir', dir, '--cloud', '--suite', suite, '--cloud-only', 'save'],
+        { stdio: 'inherit', env: { ...env, ...cfg.cloud, QUOD_SHIM_ACTIVE: '1' } })
     }
   }
   // The recording run is diagnostics only: it never fails the command (so a
