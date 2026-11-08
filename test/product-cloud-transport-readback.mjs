@@ -87,6 +87,7 @@ try {
   result.binarySha256 = sha(read(binary, 16 * 1024 * 1024))
   assert.equal(result.binarySha256, BINARY_SHA)
 
+  let restoreStreamHashes
   const restore = (label, key) => {
     const directory = path.join(temporary, label)
     fs.mkdirSync(directory, {mode: 0o700})
@@ -97,48 +98,77 @@ try {
     const child = spawnSync(binary, ['vitest', '--dir', directory, '--cloud', '--suite', SUITE, '--cloud-only', 'restore'],
       {cwd: fixture(), env, encoding: 'utf8', timeout: 180000, maxBuffer: 4 * 1024 * 1024})
     assert(!child.error && child.signal === null && child.status === 0, 'Cloud CLI invocation must settle')
+    restoreStreamHashes = {stdoutSha256: sha(child.stdout ?? ''), stderrSha256: sha(child.stderr ?? '')}
     return {directory, text: `${child.stdout ?? ''}\n${child.stderr ?? ''}`}
   }
 
   stage = 'correct-key-signed-readback'
   const accepted = restore('correct-key-empty', SERVER_KEY)
+  result.restoreDiagnostics = {...restoreStreamHashes,
+    restoredLogPresent: accepted.text.includes('quod vitest: restored the ledger of '),
+    noLedgerLogPresent: accepted.text.includes('quod vitest: Quod Cloud has no ledger for '),
+    lookupFailedLogPresent: accepted.text.includes('quod vitest: Quod Cloud lookup failed ('),
+    signatureWrongKeyLogPresent: accepted.text.includes('signed by another key than the server key this runner trusts'),
+    markerExists: fs.existsSync(path.join(accepted.directory, '.quod-cloud-restore.json')),
+    ledgerExists: fs.existsSync(path.join(accepted.directory, 'ledger.json'))}
+  stage = 'readback-marker-presence-and-schema'
   const marker = readJson(path.join(accepted.directory, '.quod-cloud-restore.json'), 64 * 1024)
+  stage = 'readback-marker-tag'
   assert.equal(marker.tag, `${process.env.GITHUB_RUN_ID}/${process.env.GITHUB_RUN_ATTEMPT}/${process.env.GITHUB_JOB}/${SUITE}`)
+  stage = 'readback-marker-found'
   assert.equal(marker.used.found, true)
+  stage = 'readback-marker-commit'
   assert.equal(marker.used.sha, process.env.GITHUB_SHA)
+  stage = 'readback-marker-id'
   assert(Number.isSafeInteger(marker.used.id) && marker.used.id > 0)
+  stage = 'readback-marker-ref'
   assert.equal(marker.used.git_ref, PROOF_REF)
+  stage = 'readback-marker-scope'
   assert.match(marker.used.scope, /^ref-[A-Za-z0-9._-]+$/)
   assert.notEqual(marker.used.scope, 'trusted')
   // The shipped wire verifier checks the exact hash-derived own-ref scope,
   // repository, nonce, suite and file list under the pinned server key.
+  stage = 'readback-ledger-read-and-schema'
   const ledgerBytes = read(path.join(accepted.directory, 'ledger.json'), 4 * 1024 * 1024)
   const ledger = JSON.parse(ledgerBytes.toString('utf8'))
   assert.equal(ledger.version, 3); assert.match(ledger.code, /^[a-f0-9]{64}$/)
+  stage = 'readback-ledger-code'
   assert.equal(sha(ledger.code), recorded.codeSha256, 'signed code identity must equal the actual producer code identity')
+  stage = 'readback-ledger-args'
   assert.deepEqual(ledger.args, ['run'])
+  stage = 'readback-ledger-keys'
   assert(Array.isArray(ledger.keys) && ledger.keys.length > 0 && ledger.keys.length <= 2048 && ledger.keys.length === ledger.states.length)
   assert(ledger.keys.every(key => typeof key === 'string') && ledger.states.every(state => typeof state === 'string'))
+  stage = 'readback-ledger-scope'
   const scope = publicScopeEvidence(ledger)
   assert.deepEqual(scope, coldRecord.publicScopeEvidence)
+  stage = 'readback-native-records'
   assert.equal(Object.keys(ledger.files).length, 2)
   const files = [], tests = [], recordHashes = [], counters = []
   const relativeFile = name => path.isAbsolute(name) ? path.relative(fixture(), name).split(path.sep).join('/') : name
   for (const record of Object.values(ledger.files)) {
+    stage = 'readback-native-record-name'
     const file = relativeFile(record.file)
     assert(EXPECTED_FILES.includes(file))
+    stage = 'readback-native-record-state'
     assert.equal(record.state, 'pass'); assert.equal(record.quarantined, false)
+    stage = 'readback-native-record-witnesses'
     assert.equal(record.w.n, 1); assert.equal(record.plain_n, 0); assert.equal(record.w.disagreements, 0)
+    stage = 'readback-result-path'
     assert.match(record.result, /^results\/[A-Za-z0-9._-]+$/)
+    stage = 'readback-result-read'
     const bytes = read(path.join(accepted.directory, record.result), 2 * 1024 * 1024)
     const value = JSON.parse(bytes.toString('utf8'))
+    stage = 'readback-result-file'
     assert.equal(relativeFile(value.filepath), file)
     let taskCount = 0
     const walk = (task, ancestors = [], depth = 0) => {
+      stage = 'readback-result-task-structure'
       assert(++taskCount <= 32 && depth <= 8)
       assert(task && typeof task.name === 'string' && task.name.length <= 1024)
       if (task.type === 'test') {
         const status = {pass: 'passed', fail: 'failed', skip: 'skipped', todo: 'todo'}[task.result?.state ?? task.mode]
+        stage = 'readback-result-state'
         assert(status)
         tests.push([file, [...ancestors, task.name].join(' '), status])
       } else {
@@ -146,16 +176,22 @@ try {
         for (const child of task.tasks) walk(child, [...ancestors, task.name], depth + 1)
       }
     }
+    stage = 'readback-result-tasks'
     assert(Array.isArray(value.tasks))
     for (const task of value.tasks) walk(task)
     files.push([file, 'passed'])
     counters.push({file, witnesses: record.w.n, plainWitnesses: record.plain_n})
     recordHashes.push({file, resultSha256: sha(bytes)})
   }
+  stage = 'readback-full-file-roster'
   assert.deepEqual(files.map(row => row[0]).sort(), EXPECTED_FILES)
+  stage = 'readback-full-test-count'
   assert.equal(tests.length, 7)
+  stage = 'readback-full-duplicate-count'
   assert.equal(tests.filter(row => row[1] === 'duplicate assertion name').length, 2)
+  stage = 'readback-full-file-equality'
   assert.deepEqual(sort(files), producer.report.files)
+  stage = 'readback-full-result-equality'
   assert.deepEqual(sort(tests), producer.report.tests)
   result.readback = {emptyBefore: true, verifiedPinnedServerKey: true, found: true, commit: marker.used.sha,
     gitRef: marker.used.git_ref, scope: marker.used.scope, trusted: false, ledgerId: marker.used.id,
@@ -173,7 +209,9 @@ try {
     signedAnswerRejected: true, outputSha256: sha(rejected.text)}
   result.passed = true
 } catch {
-  // Fixed stage labels only: no CLI output, ledger contents, config or credentials.
+  // Fixed labels, booleans and hashes only: no CLI output, ledger contents, config or credentials.
+  console.error(`QUOD_CLOUD_TRANSPORT_FAILURE_STAGE:${stage}`)
+  console.error(`QUOD_CLOUD_TRANSPORT_RESTORE_DIAGNOSTICS:${JSON.stringify(result.restoreDiagnostics ?? null)}`)
   result.error = {stage, message: 'Cloud transport proof did not satisfy its required checks'}
   process.exitCode = 1
 } finally {
@@ -183,6 +221,7 @@ try {
       assert(!fs.existsSync(temporary))
       result.privateDirectoryRemoved = true
     } catch {
+      console.error('QUOD_CLOUD_TRANSPORT_FAILURE_STAGE:private-directory-cleanup')
       result.passed = false
       result.error = {stage: 'private-directory-cleanup', message: 'Private Cloud data cleanup did not complete'}
       process.exitCode = 1
