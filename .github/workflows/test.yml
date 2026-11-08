@@ -14,9 +14,14 @@ on:
         type: boolean
         required: false
         default: false
+      cloud-transport:
+        description: OIDC Cloud publication and signed clean readback only (no replay claim)
+        type: boolean
+        required: false
+        default: false
 jobs:
   check:
-    if: ${{ !inputs.production-readiness }}
+    if: ${{ !inputs.production-readiness && !inputs.cloud-transport }}
     runs-on: ubuntu-latest
     # The README's set-up: Quod Cloud carries the ledger (the Actions cache
     # is the fallback when the server is not reachable or this repository is
@@ -58,7 +63,7 @@ jobs:
 
 
   product-plain:
-    if: ${{ inputs.production-readiness }}
+    if: ${{ inputs.production-readiness && !inputs.cloud-transport }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -100,7 +105,7 @@ jobs:
           retention-days: 3
 
   product-record:
-    if: ${{ inputs.production-readiness }}
+    if: ${{ inputs.production-readiness && !inputs.cloud-transport }}
     needs: product-plain
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -147,7 +152,7 @@ jobs:
           retention-days: 3
 
   product-witness:
-    if: ${{ inputs.production-readiness }}
+    if: ${{ inputs.production-readiness && !inputs.cloud-transport }}
     needs: product-record
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -194,7 +199,7 @@ jobs:
           retention-days: 3
 
   product-replay:
-    if: ${{ inputs.production-readiness }}
+    if: ${{ inputs.production-readiness && !inputs.cloud-transport }}
     needs: product-witness
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -241,7 +246,7 @@ jobs:
           retention-days: 3
 
   product-changed:
-    if: ${{ inputs.production-readiness }}
+    if: ${{ inputs.production-readiness && !inputs.cloud-transport }}
     needs: product-fallback
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -288,7 +293,7 @@ jobs:
           retention-days: 3
 
   product-fallback:
-    if: ${{ inputs.production-readiness }}
+    if: ${{ inputs.production-readiness && !inputs.cloud-transport }}
     needs: product-cloud
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -336,7 +341,7 @@ jobs:
           retention-days: 3
 
   product-cloud:
-    if: ${{ inputs.production-readiness }}
+    if: ${{ inputs.production-readiness && !inputs.cloud-transport }}
     needs: product-replay
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -386,7 +391,7 @@ jobs:
           retention-days: 3
 
   product-validator:
-    if: ${{ always() && inputs.production-readiness }}
+    if: ${{ always() && inputs.production-readiness && !inputs.cloud-transport }}
     needs: [product-plain, product-record, product-witness, product-replay, product-cloud, product-changed, product-fallback]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -434,5 +439,115 @@ jobs:
         with:
           name: product-readiness-acceptance
           path: ${{ runner.temp }}/product-readiness-validation/acceptance.json
+          if-no-files-found: error
+          retention-days: 3
+
+  product-cloud-transport-record:
+    if: ${{ inputs.cloud-transport }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRODUCT_WITNESS_SCOPE: ${{ github.run_id }}-${{ github.run_attempt }}
+      QUOD_VITEST_CLOUD_FALLBACK: '0'
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Require mutually exclusive manual proof selection
+        if: ${{ inputs.production-readiness }}
+        run: |
+          echo '::error::Select cloud-transport or production-readiness, never both.'
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /product-fixture/
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: .quod-action
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.18.0
+      - name: Require the exact shipped Action and tracked customer fixture lock
+        run: node .quod-action/test/product-readiness-layout.mjs
+      - name: Require actual job OIDC rather than a static server token
+        run: |
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/exp/product-native-readiness-sol-ultra
+          test -z "${QUOD_SERVER_TOKEN:-}"
+          test -n "$ACTIONS_ID_TOKEN_REQUEST_URL"
+          test -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN"
+      - name: Use the unchanged shipped ordinary-native Action
+        uses: ./.quod-action
+        with:
+          cache-namespace: product-readiness-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Require the actual cold install
+        run: node .quod-action/test/product-readiness-install.mjs record "$RUNNER_TEMP/product-cloud-transport-record"
+      - name: Record both original files and all seven native assertion states
+        run: node .quod-action/test/product-readiness-run.mjs record "$RUNNER_TEMP/product-cloud-transport-record"
+      - name: Retain only the sanitized current cold-record reference
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: product-cloud-transport-record
+          path: |
+            ${{ runner.temp }}/product-cloud-transport-record/result.json
+            ${{ runner.temp }}/product-cloud-transport-record/installation.json
+          if-no-files-found: error
+          retention-days: 3
+
+  product-cloud-transport-readback:
+    if: ${{ inputs.cloud-transport && !inputs.production-readiness }}
+    # Job dependencies include the producer's deferred Cloud-save post.
+    needs: product-cloud-transport-record
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRODUCT_WITNESS_SCOPE: ${{ github.run_id }}-${{ github.run_attempt }}
+      QUOD_VITEST_CLOUD_FALLBACK: '0'
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /product-fixture/
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: .quod-action
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.18.0
+      - name: Require the exact shipped Action and tracked customer fixture lock
+        run: node .quod-action/test/product-readiness-layout.mjs
+      # No Action, install, cache restore or local ledger in this fresh job.
+      - name: Read only this run's sanitized producer reference
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: product-cloud-transport-record
+          path: ${{ runner.temp }}/product-cloud-transport-record-reference
+      - name: Require current-run signed clean readback and wrong-key rejection
+        run: >-
+          node .quod-action/test/product-cloud-transport-readback.mjs
+          "$RUNNER_TEMP/product-cloud-transport-readback"
+          "$RUNNER_TEMP/product-cloud-transport-record-reference/result.json"
+      - name: Retain only sanitized Cloud transport proof
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: product-cloud-transport-readback
+          path: ${{ runner.temp }}/product-cloud-transport-readback/cloud-transport.json
           if-no-files-found: error
           retention-days: 3
