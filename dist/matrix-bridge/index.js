@@ -92136,7 +92136,8 @@ const {createPackEvidence} = __nccwpck_require__(2596)
 const importRuntime = new Function('specifier', 'return import(specifier)')
 const AUTH_KEYS = ['ACTIONS_RUNTIME_TOKEN', 'ACTIONS_CACHE_URL', 'ACTIONS_RESULTS_URL',
   'ACTIONS_CACHE_SERVICE_V2', 'ACTIONS_RUNTIME_URL']
-const MODES = ['matrix-research', 'matrix-control']
+const MODES = ['matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control']
+const PROPERTY47_PROFILE = 'reviewed-original-property47-single-instance-v1-research'
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
 let dispatchStarted = false, privateSession
 
@@ -92144,6 +92145,8 @@ async function main() {
   const [configFile, vitestEntry, ...args] = process.argv.slice(2)
   const cfg = JSON.parse(fs.readFileSync(configFile, 'utf8')), managed = cfg.managed
   assert(MODES.includes(managed?.mode), 'explicit matrix research mode required')
+  const control = ['matrix-control', 'matrix-property47-control'].includes(managed.mode)
+  const candidateProfile = ['matrix-property47', 'matrix-property47-control'].includes(managed.mode) ? PROPERTY47_PROFILE : null
   assert.equal(fs.realpathSync(process.cwd()), fs.realpathSync(cfg.root), 'matrix profile requires repository-root invocation')
   const entry = fs.realpathSync(vitestEntry), project = fs.realpathSync(cfg.root)
   assert.equal(entry, path.join(project, 'node_modules/vitest/vitest.mjs'), 'reviewed project Vitest entry required')
@@ -92184,16 +92187,17 @@ async function main() {
   }
   const scopeInput = {schema: 'quod-managed-matrix-action-input-scope-v1', source: managed.source,
     runtimeArchiveSha256: managed.archiveSha256, bridgeSha256: sha(fs.readFileSync(__filename)),
-    nodeVersion: process.version, cacheSdkVersion: (__nccwpck_require__(64012).version)}
+    nodeVersion: process.version, cacheSdkVersion: (__nccwpck_require__(64012).version),
+    ...(candidateProfile ? {candidateProfile} : {})}
   const scope = sha(bootstrap.canonicalManagedJSON(scopeInput))
   const collection = createManagedCollection({sdk: cache, directory, scope, namespace: managed.namespace,
-    control: managed.mode === 'matrix-control', write: managed.write === true,
+    control, write: managed.write === true,
     withCacheAuth: operation => withCacheAuth(auth, operation), onTransport: retainTransport})
   dispatchStarted = true
   const result = await dispatchManagedInputMatrix({project, out, epoch: managed.epoch, seed: managed.seed,
-    env: managed.env, control: managed.mode === 'matrix-control',
+    env: managed.env, control, ...(candidateProfile ? {candidateProfile} : {}),
     lookup: ({candidateKey}) => collection.lookupBytes({execution: {key: candidateKey}}),
-    ...(managed.write === true && managed.mode !== 'matrix-control' ? {
+    ...(managed.write === true && !control ? {
       record: ({candidateKey, file, envelopeSha256}) => collection.record({execution: {key: candidateKey}, file,
         receiptSha256: envelopeSha256}),
     } : {}), publish: collection.publish})

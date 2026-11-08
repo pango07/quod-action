@@ -152597,7 +152597,7 @@ function treePrint(root) {
 const NPM_CI = ['ci', 'clean-install', 'ic', 'install-clean', 'isntall-clean']
 
 function selectInstallProfile(root, info, managedMode) {
-  if (!['v0', 'control', 'matrix-research', 'matrix-control'].includes(managedMode)) return null
+  if (!['v0', 'control', 'matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control'].includes(managedMode)) return null
   return installProfile.select(root, info, managedMode, manifests(root))
 }
 
@@ -153014,7 +153014,7 @@ function project(root, info, requested, manifests) {
 }
 
 function select(root, info, mode, manifests) {
-  return ['v0', 'control', 'matrix-research', 'matrix-control'].includes(mode) && project(root, info, ID, manifests) ? ID : null
+  return ['v0', 'control', 'matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control'].includes(mode) && project(root, info, ID, manifests) ? ID : null
 }
 
 module.exports = {ID, select, project}
@@ -154121,7 +154121,7 @@ async function dependencies(facts) {
   const info = D.detect(root)
   const t0 = Date.now()
   const managedMode = core.getInput('managed-vitest') || 'off'
-  if (info.pm === 'npm' && ['v0', 'control', 'matrix-research', 'matrix-control'].includes(managedMode)) {
+  if (info.pm === 'npm' && ['v0', 'control', 'matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control'].includes(managedMode)) {
     const present = name => {
       try { fs.lstatSync(path.join(root, name)); return true }
       catch (error) { if (error.code === 'ENOENT') return false; throw error }
@@ -154133,7 +154133,7 @@ async function dependencies(facts) {
       return null
     }
   }
-  const installProfile = ['v0', 'control', 'matrix-research', 'matrix-control'].includes(managedMode) && (core.getInput('mode') || 'check') === 'check' && process.platform === 'linux' && process.arch === 'x64'
+  const installProfile = ['v0', 'control', 'matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control'].includes(managedMode) && (core.getInput('mode') || 'check') === 'check' && process.platform === 'linux' && process.arch === 'x64'
     ? D.selectInstallProfile(root, info, managedMode) : null
   const key = D.key(root, info, facts, process.env, installProfile)
   const os = `${process.platform}-${process.arch}`
@@ -154344,7 +154344,7 @@ async function vitest(mode) {
   }
   const s = scope()
   const managedMode = core.getInput('managed-vitest') || 'off'
-  if (!['off', 'v0', 'control', 'matrix-research', 'matrix-control'].includes(managedMode)) throw new Error('managed-vitest must be off, v0, control, matrix-research, or matrix-control')
+  if (!['off', 'v0', 'control', 'matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control'].includes(managedMode)) throw new Error('managed-vitest must be off, v0, control, matrix-research, matrix-control, matrix-property47, or matrix-property47-control')
   const managed = managedMode === 'off' ? null : installManaged(mode, managedMode)
   if (managed) {
     // Managed receipts have their own transport and supervisor. The ordinary
@@ -154522,9 +154522,11 @@ function installManaged(mode, managedMode) {
   fs.mkdirSync(runtime, {recursive: true})
   execFileSync('tar', ['-xzf', path.join(dist, 'managed', 'runtime.tar.gz'), '-C', runtime])
   const matrix = managedMode.startsWith('matrix-')
+  const property47 = ['matrix-property47', 'matrix-property47-control'].includes(managedMode)
   const bridge = path.join(dist, matrix ? 'matrix-bridge' : 'managed-bridge', 'index.js')
   const required = matrix ? ['matrix-input-dispatcher.mjs', 'resolved-compile-certificate.mjs',
-    'matrix-candidate-envelope.mjs', 'matrix-receipt.mjs', 'matrix-native.mjs'] : ['dispatcher.mjs']
+    'matrix-candidate-envelope.mjs', 'matrix-receipt.mjs', 'matrix-native.mjs',
+    ...(property47 ? ['matrix-candidate-profiles.mjs'] : [])] : ['dispatcher.mjs']
   if (!fs.existsSync(bridge) || required.some(file => !fs.existsSync(path.join(runtime, file)))) throw new Error('managed runtime incomplete')
   const cacheAuth = path.join(paths.base, 'managed-cache-auth.json')
   fs.rmSync(cacheAuth, {force: true})

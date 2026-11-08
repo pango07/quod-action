@@ -2,7 +2,7 @@
   "schema": "quod-managed-action-runtime-v1",
   "source": {
     "repository": "pango07/quod",
-    "commit": "85c96d6c62c9252f3aa464a851f514348353d010"
+    "commit": "f67fe14033de76f0b26b436cef4e5d50b0af1ee3"
   },
-  "sha256": "0cba2f379b52d9159d4a1655b603ecca71ee8811992505ca40f6c64f0a8ae2f9"
+  "sha256": "519c9ad37472ddb50b428b9d2dcd43ef930add1f203a7c440abc5ce7e4a442b8"
 }

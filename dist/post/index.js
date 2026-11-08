@@ -152666,7 +152666,7 @@ function treePrint(root) {
 const NPM_CI = ['ci', 'clean-install', 'ic', 'install-clean', 'isntall-clean']
 
 function selectInstallProfile(root, info, managedMode) {
-  if (!['v0', 'control', 'matrix-research', 'matrix-control'].includes(managedMode)) return null
+  if (!['v0', 'control', 'matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control'].includes(managedMode)) return null
   return installProfile.select(root, info, managedMode, manifests(root))
 }
 
@@ -153083,7 +153083,7 @@ function project(root, info, requested, manifests) {
 }
 
 function select(root, info, mode, manifests) {
-  return ['v0', 'control', 'matrix-research', 'matrix-control'].includes(mode) && project(root, info, ID, manifests) ? ID : null
+  return ['v0', 'control', 'matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control'].includes(mode) && project(root, info, ID, manifests) ? ID : null
 }
 
 module.exports = {ID, select, project}
