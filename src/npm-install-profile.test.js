@@ -37,9 +37,15 @@ function fixture(t) {
       fs.writeFileSync(file, text)
     }
   }
+  function syntheticBlankConfigVariant(i) {
+    write(i)
+    // This synthetic admission control changes ONLY .npmrc. The actual twelve
+    // inputs contain min-release-age=7 and now require native installation.
+    fs.writeFileSync(path.join(root, '.npmrc'), '# Synthetic blank-config admission control.\n')
+  }
   const profile = (mode = 'v0') => D.selectInstallProfile(root, info, mode)
   const key = (requested = profile(), e = env, f = facts) => D.key(root, info, f, e, requested)
-  return {base, root, env, facts, npm, write, profile, key}
+  return {base, root, env, facts, npm, write, syntheticBlankConfigVariant, profile, key}
 }
 function changePackage(root, update) {
   const file = path.join(root, 'package.json'), pkg = JSON.parse(fs.readFileSync(file))
@@ -47,7 +53,7 @@ function changePackage(root, update) {
   fs.writeFileSync(file, JSON.stringify(pkg))
 }
 
-test('the actual twelve source inputs admit ten equivalent installs and two dependency changes', t => {
+test('the twelve original manifest projections retain ten equivalent keys only in synthetic blank-config variants', t => {
   assert.equal(window.schema, 'quod-npm-install-reviewed-window-v1')
   assert.equal(window.commits.length, 12)
   const f = fixture(t), keys = [], old = [], paths = [], raw = []
@@ -60,10 +66,15 @@ test('the actual twelve source inputs admit ten equivalent installs and two depe
     assert.equal(f.profile('matrix-control'), P.ID, `matrix control c${i}`)
     assert.equal(f.profile('matrix-property47'), P.ID, `property47 research c${i}`)
     assert.equal(f.profile('matrix-property47-control'), P.ID, `property47 control c${i}`)
-    keys.push(f.key())
+    assert.equal(P.select(f.root, info, 'v0', D.manifests(f.root)), P.ID, 'pure finite manifest/lock selection remains independent of npm config admission')
+    assert.throws(() => f.key(), /\.npmrc contains npm configuration that requires native installation/, `original c${i} requires native npm`)
     old.push(legacy.key(f.root, info, f.facts, f.env))
     paths.push(D.npmPaths(f.root, f.root, f.profile()))
     raw.push(hash(before))
+    const projection = P.project(f.root, info, P.ID, D.manifests(f.root))
+    f.syntheticBlankConfigVariant(i)
+    assert.deepEqual(P.project(f.root, info, P.ID, D.manifests(f.root)), projection, 'only synthetic npm config admission changed')
+    keys.push(f.key())
     assert.deepEqual(fs.readFileSync(path.join(f.root, 'package.json')), before, 'install projection never rewrites compiler/build/test input')
   }
   assert.equal(new Set(keys.slice(0, 10)).size, 1)
@@ -79,7 +90,7 @@ test('the actual twelve source inputs admit ten equivalent installs and two depe
 test('safe default-off keys rotate old npm entries while preserving cache paths and profile selection', t => {
   const f = fixture(t)
   for (let i = 0; i < 12; i++) {
-    f.write(i)
+    f.syntheticBlankConfigVariant(i)
     for (const mode of [undefined, '', 'off', 'shadow', 'future']) assert.equal(D.selectInstallProfile(f.root, info, mode), null)
     const want = D.key(f.root, info, f.facts, f.env)
     assert.notEqual(want, legacy.key(f.root, info, f.facts, f.env), 'old npm trees lack the new install safety policy')
@@ -105,7 +116,7 @@ test('unreviewed inputs leave the finite profile and unsafe install inputs canno
     () => { const p = path.join(f.root, 'packages/convex-helpers/package.json'); fs.renameSync(p, p + '.original'); fs.symlinkSync(p + '.original', p) },
   ]
   for (const [i, update] of attempts.entries()) {
-    f.write(0); update()
+    f.syntheticBlankConfigVariant(0); update()
     assert.equal(f.profile(), null, `decline case ${i}`)
     if ([6, 7, 8, 9, 10].includes(i)) assert.throws(() => f.key(P.ID), /npm dependency reuse declined/, `unsafe key case ${i}`)
     else assert.equal(f.key(P.ID), D.key(f.root, info, f.facts, f.env), `unprofiled key case ${i}`)
@@ -123,7 +134,7 @@ test('lifecycle, workspace, local, link and new dependency changes cannot enter 
     pkg => { pkg.exports['./new'] = './unreviewed.js' },
   ]
   for (const [i, update] of updates.entries()) {
-    f.write(0); changePackage(f.root, update)
+    f.syntheticBlankConfigVariant(0); changePackage(f.root, update)
     assert.equal(f.profile(), null, `unsafe or unreviewed root case ${i}`)
     if (i >= 8 && i <= 14) assert.throws(() => f.key(P.ID), /npm dependency reuse declined/)
     else assert.equal(f.key(P.ID), D.key(f.root, info, f.facts, f.env))
@@ -131,7 +142,7 @@ test('lifecycle, workspace, local, link and new dependency changes cannot enter 
   for (const update of [lock => { lock.packages['local'] = {} },
     lock => { lock.packages['node_modules/local'] = {link: true, resolved: '../local'} },
     lock => { lock.packages[''].workspaces = ['packages/*'] }]) {
-    f.write(0)
+    f.syntheticBlankConfigVariant(0)
     const file = path.join(f.root, info.lock), lock = JSON.parse(fs.readFileSync(file))
     update(lock); fs.writeFileSync(file, JSON.stringify(lock))
     assert.equal(f.profile(), null)
@@ -139,8 +150,8 @@ test('lifecycle, workspace, local, link and new dependency changes cannot enter 
   }
 })
 
-test('npmrc, npm environment, Node/npm versions and platform-image scope remain keyed', t => {
-  const f = fixture(t); f.write(0)
+test('synthetic blank-config admission retains environment, Node/npm and platform-image scope and refuses significant npmrc', t => {
+  const f = fixture(t); f.syntheticBlankConfigVariant(0)
   const baseline = f.key()
   for (const [label, env, facts] of [
     ['node', f.env, {...f.facts, node: 'different-node'}],
@@ -165,7 +176,7 @@ test('npmrc, npm environment, Node/npm versions and platform-image scope remain 
   assert.equal(f.key(), baseline, 'source bytes have separate build/test authority')
 })
 
-test('main selects the profile only for the explicit supported managed modes', async t => {
+test('main selects the synthetic blank-config profile only for the explicit supported managed modes', async t => {
   const f = fixture(t)
   const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8')
   const source = main.slice(main.indexOf('async function dependencies('), main.indexOf('\n// The task cache:'))
@@ -180,7 +191,7 @@ test('main selects the profile only for the explicit supported managed modes', a
     ['matrix-control', 'check', 'darwin', 'x64', false],
     ['matrix-property47', 'shadow', 'linux', 'x64', false], ['matrix-property47-control', 'check', 'linux', 'arm64', false],
   ]) {
-    f.write(0)
+    f.syntheticBlankConfigVariant(0)
     const restores = [], states = new Map(), inputs = {'managed-vitest': managed, mode}
     const result = await vm.runInNewContext(source + '; dependencies(' + JSON.stringify(f.facts) + ')', {
       D, fs, path, crypto, Date,
@@ -198,6 +209,32 @@ test('main selects the profile only for the explicit supported managed modes', a
     if (admitted) selected.push(result.key)
   }
   assert.equal(selected[0], selected[1], 'replay and control have the same install policy')
+})
+
+test('all twelve actual npmrc inputs decline setup before any cache restore or saved state', async t => {
+  const f = fixture(t)
+  const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8')
+  const source = main.slice(main.indexOf('async function dependencies('), main.indexOf('\n// The task cache:'))
+  for (let i = 0; i < 12; i++) {
+    f.write(i)
+    const before = fs.readFileSync(path.join(f.root, '.npmrc'))
+    assert.equal(hash(before), window.commits[i].files['.npmrc'], `original c${i} npm config bytes`)
+    for (const mode of ['off', 'matrix-research']) {
+      const restores = [], states = [], messages = []
+      assert.throws(() => f.key(mode === 'off' ? null : P.ID), /\.npmrc contains npm configuration that requires native installation/)
+      const result = await vm.runInNewContext(source + '; dependencies(' + JSON.stringify(f.facts) + ')', {
+        D: {...D, key: () => { throw new Error('original configured inputs must not compute a cache key') }},
+        fs, path, crypto, Date, process: {platform: 'linux', arch: 'x64', env: {...f.env, GITHUB_WORKSPACE: f.root}, cwd: () => f.root},
+        core: {getInput: name => name === 'managed-vitest' ? mode : '', info: value => messages.push(value), saveState: (...args) => states.push(args)},
+        cache: {restoreCache: async (...args) => { restores.push(args); return undefined }},
+        cacheNamespace: () => 'fixture-', maySave: () => true, home: () => f.base,
+      })
+      assert.equal(result, null)
+      assert.deepEqual(restores, []); assert.deepEqual(states, [])
+      assert.match(messages.join('\n'), /\.npmrc contains npm configuration that requires native installation; no dependency tree is restored or saved, and native npm ci runs/)
+    }
+    assert.deepEqual(fs.readFileSync(path.join(f.root, '.npmrc')), before, 'original fixture remains unchanged')
+  }
 })
 
 test('binding.gyp and competing shrinkwrap decline dependency-tree authority in every mode', async t => {
@@ -227,7 +264,7 @@ test('binding.gyp and competing shrinkwrap decline dependency-tree authority in 
 })
 
 function invokeHook(f, {tree = true, marker = true, mutate, args = ['ci']} = {}) {
-  f.write(0)
+  f.syntheticBlankConfigVariant(0)
   const base = path.join(f.base, 'hook'), npm = f.npm, bin = path.join(npm, 'bin/npm-cli.js')
   fs.mkdirSync(base, {recursive: true})
   fs.writeFileSync(path.join(npm, 'package.json'), JSON.stringify({version: f.facts.npm}))
@@ -252,7 +289,7 @@ function invokeHook(f, {tree = true, marker = true, mutate, args = ['ci']} = {})
   return {messages, listeners, exits, base}
 }
 
-test('the npm hook requires an actual restored tree, marker, arguments and unchanged current inputs', t => {
+test('the synthetic blank-config npm hook requires an actual restored tree, marker, arguments and unchanged current inputs', t => {
   const f = fixture(t)
   const valid = invokeHook(f)
   assert.deepEqual(valid.exits, [0]); assert.equal(valid.listeners.length, 0)
@@ -261,7 +298,7 @@ test('the npm hook requires an actual restored tree, marker, arguments and uncha
     fs.writeFileSync(path.join(f.root, 'package.json'), window.blobs[window.commits[4].files['package.json']])
     fs.rmSync(path.join(f.root, 'packages/convex-helpers/package.json'))
   }})
-  assert.deepEqual(equivalent.exits, [0], 'the reviewed c0 to c5 install projection can use the materialized tree')
+  assert.deepEqual(equivalent.exits, [0], 'the synthetic blank-config c0 to c5 projection can use the materialized tree')
   for (const options of [{tree: false}, {marker: false},
     {mutate: ({nm}) => fs.mkdirSync(path.join(nm, 'changed-after-restore'))},
     {mutate: () => changePackage(f.root, pkg => { pkg.scripts.prepare = 'node observe.mjs' })},
