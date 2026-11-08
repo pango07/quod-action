@@ -51,7 +51,8 @@ try {
   const ledger = JSON.parse(ledgerBytes)
   const scope = publicScopeEvidence(ledger)
   assert.deepEqual(scope, coldRecord.publicScopeEvidence, 'the signed ledger must contain this acceptance run’s actual cold-record scope state')
-  assert.equal(ledger.version, 3); assert.match(ledger.code, /^[a-f0-9]{64}$/)
+  // bin-024b929 stores the first 16 BLAKE3 hex characters in ledger.code.
+  assert.equal(ledger.version, 3); assert.match(ledger.code, /^[a-f0-9]{16}$/)
   assert.deepEqual(ledger.args, ['run']) // bin-024 excludes only reporter/output formatting arguments.
   assert(Array.isArray(ledger.keys) && ledger.keys.length > 0 && ledger.keys.length === ledger.states.length)
   assert(ledger.keys.every(key => typeof key === 'string') && ledger.states.every(state => typeof state === 'string'))

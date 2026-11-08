@@ -131,7 +131,8 @@ try {
   stage = 'readback-ledger-read-and-schema'
   const ledgerBytes = read(path.join(accepted.directory, 'ledger.json'), 4 * 1024 * 1024)
   const ledger = JSON.parse(ledgerBytes.toString('utf8'))
-  assert.equal(ledger.version, 3); assert.match(ledger.code, /^[a-f0-9]{64}$/)
+  // bin-024b929 stores the first 16 BLAKE3 hex characters in ledger.code.
+  assert.equal(ledger.version, 3); assert.match(ledger.code, /^[a-f0-9]{16}$/)
   stage = 'readback-ledger-code'
   assert.equal(sha(ledger.code), recorded.codeSha256, 'signed code identity must equal the actual producer code identity')
   stage = 'readback-ledger-args'
