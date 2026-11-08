@@ -152475,9 +152475,37 @@ function npmVersion(nodeBin) {
   return ''
 }
 
+// One selector for the npmrc files hashed by the key and inspected by all
+// three admission points. The saved Node path is setup-node's, not the
+// potentially different Node that runs the Action's post bundle.
+function npmInstallation(nodeBin) {
+  const prefix = path.dirname(path.dirname(fs.realpathSync(nodeBin)))
+  const root = fs.realpathSync(path.join(prefix, 'lib', 'node_modules', 'npm'))
+  return {prefix, root, cli: fs.realpathSync(path.join(root, 'bin', 'npm-cli.js'))}
+}
+
+function npmConfigFiles(root, facts = {bin: process.execPath}, env = process.env) {
+  const npm = npmInstallation(facts.bin)
+  const pick = name => {
+    const key = Object.keys(env).find(key => key.toLowerCase() === name.toLowerCase())
+    return key === undefined ? undefined : env[key]
+  }
+  const home = env.HOME || (__nccwpck_require__(48161).homedir)()
+  return [['.npmrc', path.join(root, '.npmrc')],
+    ['userconfig', pick('NPM_CONFIG_USERCONFIG') || path.join(home, '.npmrc')],
+    ['globalconfig', pick('NPM_CONFIG_GLOBALCONFIG') || path.join(npm.prefix, 'etc', 'npmrc')],
+    ['builtinconfig', path.join(npm.root, 'npmrc')]]
+}
+
 // The key: everything the install reads that can change what it puts on
 // disk. `facts`: { node, npm } (versions).
 function key(root, info, facts, env = process.env, requestedProfile = null) {
+  if (info.pm === 'npm') {
+    const unsafe = npmInstallUnsafe(root, info, facts, env)
+    // The npm hook catches this before it can answer for `npm ci`. A new
+    // implicit install input after restore must run npm, not mint a key.
+    if (unsafe) throw new Error(`npm dependency reuse declined: ${unsafe}`)
+  }
   const h = crypto.createHash('sha256')
   const add = (label, v) => {
     h.update(`${label}\0`)
@@ -152489,6 +152517,9 @@ function key(root, info, facts, env = process.env, requestedProfile = null) {
   const profile = installProfile.project(root, info, requestedProfile, names)
   if (profile) add('install-profile', profile.id)
   add('pm', info.pm)
+  // Old npm entries may have been installed with an unkeyed binding.gyp or
+  // overriding shrinkwrap. Do not reuse them even after that input is gone.
+  if (info.pm === 'npm') add('npm-install-policy', 'closed-root-install-inputs-v1')
   add('lock', unversioned(path.join(root, info.lock), info.lock))
   if (profile) add('manifest package.json', profile.manifest)
   else for (const m of names) add(`manifest ${m}`, unversioned(path.join(root, m), m))
@@ -152496,17 +152527,9 @@ function key(root, info, facts, env = process.env, requestedProfile = null) {
   add('node', facts.node)
   if (info.pm === 'npm') {
     add('npm', facts.npm)
-    // npm's user and global config files (setup-node's registry-url writes
-    // one): `omit`, `legacy-peer-deps`, `ignore-scripts` there change what
-    // `npm ci` installs.
-    const pick = (k) => env[k] ?? env[k.toLowerCase()]
-    const home = env.HOME || (__nccwpck_require__(48161).homedir)()
-    add('userconfig', read(pick('NPM_CONFIG_USERCONFIG') || path.join(home, '.npmrc')))
-    let prefix = ''
-    try {
-      prefix = path.dirname(path.dirname(fs.realpathSync(facts.bin)))
-    } catch {}
-    add('globalconfig', read(pick('NPM_CONFIG_GLOBALCONFIG') || path.join(prefix, 'etc', 'npmrc')))
+    // Bind admitted blank/comment-only user, global and builtin config.
+    // Significant config or semantic npm environment is declined above.
+    for (const [label, file] of npmConfigFiles(root, facts, env).slice(1)) add(label, read(file))
   }
   add('platform', process.platform)
   add('arch', process.arch)
@@ -152568,7 +152591,9 @@ function npmPaths(ws, root, requestedProfile = null) {
 
 // Why a node_modules installed here must not be saved, or null. The tree
 // is kept only when nothing outside the key can have gone into it.
-function npmUnsafe(root) {
+function npmUnsafe(root, facts, env) {
+  const implicit = npmInstallUnsafe(root, undefined, facts, env)
+  if (implicit) return implicit
   for (const m of manifests(root)) {
     const s = json(path.join(root, m))?.scripts ?? {}
     const l = LIFECYCLE.find((k) => s[k])
@@ -152583,6 +152608,104 @@ function npmUnsafe(root) {
       return `${name} has an install script Quod does not know to stay in its own directory`
   }
   return null
+}
+
+// Inputs the current npm tree key cannot close. Check before restore, again
+// when the hook would skip npm, and before post saves a fresh installation.
+// Workspaces/local links deliberately run native: the manifest walker is
+// not an npm workspace/glob or external source resolver.
+function npmInstallUnsafe(root, info, facts, env = process.env) {
+  const present = name => {
+    try { return fs.lstatSync(path.join(root, name)) }
+    catch (error) { if (error.code === 'ENOENT') return null; throw error }
+  }
+  if (present('binding.gyp')) return 'root binding.gyp can add an implicit install'
+  const packageLock = present('package-lock.json'), shrinkwrap = present('npm-shrinkwrap.json')
+  if (packageLock && shrinkwrap) return 'npm-shrinkwrap.json overrides package-lock.json'
+  const lockName = packageLock ? 'package-lock.json' : 'npm-shrinkwrap.json'
+  const lockStat = packageLock || shrinkwrap
+  if (!lockStat?.isFile() || (info && info.lock !== lockName)) return 'npm lockfile selection is not a regular current input'
+  const manifest = present('package.json')
+  if (!manifest?.isFile()) return 'package.json is not a regular install input'
+  const pkg = json(path.join(root, 'package.json')), lock = json(path.join(root, lockName))
+  const object = value => value && typeof value === 'object' && !Array.isArray(value)
+  if (!object(pkg) || !object(lock?.packages)) return 'npm install manifests are unreadable or unsupported'
+  if (Object.hasOwn(pkg, 'workspaces') || Object.hasOwn(lock.packages[''] || {}, 'workspaces')) return 'npm workspaces require native installation'
+  const local = (value, resolved = false) => {
+    if (typeof value !== 'string') return false
+    const text = value.trim()
+    if (resolved && /^https?:\/\//i.test(text)) return false
+    return /^(?:file:|git\+file:|link:|workspace:|\.{1,2}[\\/]|[\\/]|~[\\/]|[A-Za-z]:[\\/])/i.test(text) ||
+      /\.(?:tgz|tar|tar\.gz)(?:[?#].*)?$/i.test(text) || /^[^:]*[\\/][^:]*[\\/]/.test(text)
+  }
+  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+    const declared = pkg[field]
+    if (declared !== undefined && !object(declared)) return `${field} is not an ordinary dependency map`
+    if (Object.values(declared || {}).some(value => local(value))) return 'local or linked npm dependencies require native installation'
+  }
+  for (const [name, entry] of Object.entries(lock.packages)) {
+    if (!object(entry)) return 'npm lockfile package entries are unsupported'
+    if ((name && !name.split('/').includes('node_modules')) || entry.link || local(entry.resolved, true)) return 'npm workspace or local lockfile entries require native installation'
+  }
+  if (Object.keys(env).some(name => /^(?:PREFIX|DESTDIR|npm_config_(?:prefix|global|location))$/i.test(name))) return 'npm prefix or global installation configuration requires native installation'
+  if (env.ESBUILD_BINARY_PATH) return 'ESBUILD_BINARY_PATH can change install-script outputs'
+  const environment = npmEnvironmentUnsafe(env)
+  if (environment) return environment
+  // npmrc loads a precedence chain and expands environment/redirects:
+  // https://docs.npmjs.com/cli/v11/configuring-npm/npmrc/#files
+  // Do not implement a partial INI/nopt interpreter. Only empty/comments
+  // config is admitted; even escaped interpolation declines conservatively.
+  for (const [label, file] of npmConfigFiles(root, facts, env)) {
+    let contents
+    try { contents = fs.readFileSync(file) }
+    catch (error) { if (error.code === 'ENOENT') continue; throw error }
+    if (contents.includes('${')) return `${label} contains npm environment interpolation`
+    if (contents.toString('utf8').split('\n').some(line => !/^[ \t\r]*(?:[#;].*)?$/.test(line))) return `${label} contains npm configuration that requires native installation`
+  }
+  return null
+}
+
+function npmEnvironmentUnsafe(env) {
+  const seen = new Set()
+  for (const [name, value] of Object.entries(env)) {
+    const match = /^npm_config_(.+)$/i.exec(name)
+    if (!match) continue
+    const config = match[1].toLowerCase().replace(/_/g, '-')
+    if (seen.has(config)) return 'duplicate npm environment configuration requires native installation'
+    seen.add(config)
+    if (typeof value !== 'string' || value.includes('${')) return 'npm environment interpolation requires native installation'
+    if (['userconfig', 'globalconfig'].includes(config)) {
+      if (!path.isAbsolute(value)) return 'relative npm configuration paths require native installation'
+      continue
+    }
+    if (['audit', 'fund', 'progress', 'update-notifier'].includes(config) && ['true', 'false'].includes(value)) continue
+    if (config === 'color' && ['true', 'false', 'always'].includes(value)) continue
+    if (config === 'loglevel' && ['silent', 'error', 'warn', 'notice', 'http', 'info', 'verbose', 'silly'].includes(value)) continue
+    return 'npm environment configuration requires native installation'
+  }
+  return null
+}
+
+function npmCliMatches(nodeBin, entry) {
+  return npmInstallation(nodeBin).cli === fs.realpathSync(entry)
+}
+
+// nopt accepts aliases, prefixes and order-sensitive semantic arguments.
+// Only exact output flags are admitted; every other form runs real npm.
+function npmCiOutputOnly(args) {
+  const flags = new Set(['--audit', '--no-audit', '--fund', '--no-fund', '--progress', '--no-progress',
+    '--update-notifier', '--no-update-notifier', '--color', '--no-color', '--silent', '--quiet',
+    '-s', '-q', '--verbose', '-d', '-dd', '-ddd'])
+  const levels = new Set(['silent', 'error', 'warn', 'notice', 'http', 'info', 'verbose', 'silly'])
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+    if (flags.has(arg)) continue
+    if (arg === '--loglevel' && levels.has(args[i + 1])) { i++; continue }
+    if (typeof arg === 'string' && arg.startsWith('--loglevel=') && levels.has(arg.slice(11))) continue
+    if (['--color=true', '--color=false', '--color=always'].includes(arg)) continue
+    return false
+  }
+  return true
 }
 
 // `npm ci`'s arguments without the ones that change only its output.
@@ -152670,7 +152793,7 @@ function selectInstallProfile(root, info, managedMode) {
   return installProfile.select(root, info, managedMode, manifests(root))
 }
 
-module.exports = { VERSION, detect, findRoot, manifests, npmVersion, key, npmPaths, npmUnsafe, npmArgs, treePrint, fullPrint, NPM_CI, selectInstallProfile }
+module.exports = { VERSION, detect, findRoot, manifests, npmVersion, key, npmPaths, npmUnsafe, npmInstallUnsafe, npmCliMatches, npmCiOutputOnly, npmArgs, treePrint, fullPrint, NPM_CI, selectInstallProfile }
 
 
 /***/ }),
@@ -154113,7 +154236,7 @@ async function dependencies() {
     } catch {}
     if (!installed) return core.info('Quod dependencies: no `npm ci` finished in this job; nothing saved')
     if (installed.key !== st.key) return core.info('Quod dependencies: the install ran on other inputs than the job started with; nothing saved')
-    const unsafe = D.npmUnsafe(st.root)
+    const unsafe = D.npmUnsafe(st.root, st.facts, process.env)
     if (unsafe) return core.info(`Quod dependencies: node_modules is not saved: ${unsafe}`)
     if (D.fullPrint(st.ws, st.paths) !== installed.print) return core.info('Quod dependencies: node_modules changed after `npm ci`; not saved')
     fs.writeFileSync(path.join(st.root, 'node_modules', '.quod-deps.json'), JSON.stringify({ key: st.key, args: installed.args, npm: st.facts.npm }))
