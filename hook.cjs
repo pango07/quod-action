@@ -272,9 +272,10 @@ function npmCi(bin, args) {
   try {
     fs.rmSync(record, { force: true })
   } catch {}
-  const want = D.npmArgs(args.slice(1))
-  let now
+  let now, want
   try {
+    if (!D.npmCiOutputOnly(args.slice(1)) || !D.npmCliMatches(process.execPath, entry)) return
+    want = D.npmArgs(args.slice(1))
     const npm = JSON.parse(fs.readFileSync(path.join(path.dirname(entry), '..', 'package.json'), 'utf8')).version
     now = D.key(st.root, st.info, { node: process.version, npm, bin: process.execPath }, process.env, st.installProfile)
   } catch {
@@ -286,7 +287,7 @@ function npmCi(bin, args) {
       marker = JSON.parse(fs.readFileSync(path.join(st.root, 'node_modules', '.quod-deps.json'), 'utf8'))
     } catch {}
     const same = marker && marker.key === now && JSON.stringify(marker.args) === JSON.stringify(want)
-    if (same && D.treePrint(st.root) === st.print) {
+    if (same && D.fullPrint(st.ws, st.paths) === st.print) {
       // The key leaves the project's own version out (a release bump
       // installs the same tree); npm writes it only into the hidden
       // lockfile's header, brought up to date here as npm ci would.

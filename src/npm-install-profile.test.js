@@ -20,9 +20,13 @@ function fixture(t) {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'quod-install-profile-')))
   t.after(() => fs.rmSync(base, {recursive: true, force: true}))
   const root = path.join(base, 'project')
+  const node = path.join(base, 'toolchain/bin/node'), npm = path.join(base, 'toolchain/lib/node_modules/npm')
+  fs.mkdirSync(path.dirname(node), {recursive: true}); fs.writeFileSync(node, '')
+  fs.mkdirSync(path.join(npm, 'bin'), {recursive: true}); fs.writeFileSync(path.join(npm, 'bin/npm-cli.js'), '')
+  fs.writeFileSync(path.join(npm, 'package.json'), '{"version":"fixture-npm-version"}')
   const env = {HOME: base, ImageOS: 'ubuntu24', ImageVersion: 'fixture-image',
     NPM_CONFIG_USERCONFIG: path.join(base, 'user.npmrc'), NPM_CONFIG_GLOBALCONFIG: path.join(base, 'global.npmrc')}
-  const facts = {node: process.version, npm: 'fixture-npm-version', bin: process.execPath}
+  const facts = {node: process.version, npm: 'fixture-npm-version', bin: node}
   function write(i) {
     fs.rmSync(root, {recursive: true, force: true})
     for (const [name, digest] of Object.entries(window.commits[i].files)) {
@@ -35,7 +39,7 @@ function fixture(t) {
   }
   const profile = (mode = 'v0') => D.selectInstallProfile(root, info, mode)
   const key = (requested = profile(), e = env, f = facts) => D.key(root, info, f, e, requested)
-  return {base, root, env, facts, write, profile, key}
+  return {base, root, env, facts, npm, write, profile, key}
 }
 function changePackage(root, update) {
   const file = path.join(root, 'package.json'), pkg = JSON.parse(fs.readFileSync(file))
@@ -72,19 +76,19 @@ test('the actual twelve source inputs admit ten equivalent installs and two depe
   assert.deepEqual(paths[0].filter(p => !p.startsWith('!')), ['node_modules'])
 })
 
-test('default-off keys and paths remain byte-compatible with deps v4 for all twelve inputs', t => {
+test('safe default-off keys rotate old npm entries while preserving cache paths and profile selection', t => {
   const f = fixture(t)
   for (let i = 0; i < 12; i++) {
     f.write(i)
     for (const mode of [undefined, '', 'off', 'shadow', 'future']) assert.equal(D.selectInstallProfile(f.root, info, mode), null)
-    const want = legacy.key(f.root, info, f.facts, f.env)
-    assert.equal(D.key(f.root, info, f.facts, f.env), want)
+    const want = D.key(f.root, info, f.facts, f.env)
+    assert.notEqual(want, legacy.key(f.root, info, f.facts, f.env), 'old npm trees lack the new install safety policy')
     assert.equal(f.key('unknown-profile'), want)
     assert.deepEqual(D.npmPaths(f.root, f.root), legacy.npmPaths(f.root, f.root))
   }
 })
 
-test('unreviewed bytes, pairings, manifest inventory and implicit install inputs decline to the old key', t => {
+test('unreviewed inputs leave the finite profile and unsafe install inputs cannot mint a key', t => {
   const f = fixture(t)
   const attempts = [
     () => fs.appendFileSync(path.join(f.root, 'package.json'), '\n'),
@@ -103,7 +107,8 @@ test('unreviewed bytes, pairings, manifest inventory and implicit install inputs
   for (const [i, update] of attempts.entries()) {
     f.write(0); update()
     assert.equal(f.profile(), null, `decline case ${i}`)
-    assert.equal(f.key(P.ID), legacy.key(f.root, info, f.facts, f.env), `legacy key case ${i}`)
+    if ([6, 7, 8, 9, 10].includes(i)) assert.throws(() => f.key(P.ID), /npm dependency reuse declined/, `unsafe key case ${i}`)
+    else assert.equal(f.key(P.ID), D.key(f.root, info, f.facts, f.env), `unprofiled key case ${i}`)
     assert.deepEqual(D.npmPaths(f.root, f.root, P.ID), legacy.npmPaths(f.root, f.root), `legacy paths case ${i}`)
   }
 })
@@ -120,7 +125,8 @@ test('lifecycle, workspace, local, link and new dependency changes cannot enter 
   for (const [i, update] of updates.entries()) {
     f.write(0); changePackage(f.root, update)
     assert.equal(f.profile(), null, `unsafe or unreviewed root case ${i}`)
-    assert.equal(f.key(P.ID), legacy.key(f.root, info, f.facts, f.env))
+    if (i >= 8 && i <= 14) assert.throws(() => f.key(P.ID), /npm dependency reuse declined/)
+    else assert.equal(f.key(P.ID), D.key(f.root, info, f.facts, f.env))
   }
   for (const update of [lock => { lock.packages['local'] = {} },
     lock => { lock.packages['node_modules/local'] = {link: true, resolved: '../local'} },
@@ -129,7 +135,7 @@ test('lifecycle, workspace, local, link and new dependency changes cannot enter 
     const file = path.join(f.root, info.lock), lock = JSON.parse(fs.readFileSync(file))
     update(lock); fs.writeFileSync(file, JSON.stringify(lock))
     assert.equal(f.profile(), null)
-    assert.equal(f.key(P.ID), legacy.key(f.root, info, f.facts, f.env))
+    assert.throws(() => f.key(P.ID), /npm dependency reuse declined/)
   }
 })
 
@@ -143,11 +149,14 @@ test('npmrc, npm environment, Node/npm versions and platform-image scope remain 
     ['NODE_ENV', {...f.env, NODE_ENV: 'production'}, f.facts],
     ['npm omit', {...f.env, npm_config_omit: 'dev'}, f.facts],
     ['npm peer policy', {...f.env, NPM_CONFIG_LEGACY_PEER_DEPS: 'true'}, f.facts],
-  ]) assert.notEqual(f.key(P.ID, env, facts), baseline, label)
+  ]) {
+    if (label.startsWith('npm ')) assert.throws(() => f.key(P.ID, env, facts), /requires native installation/, label)
+    else assert.notEqual(f.key(P.ID, env, facts), baseline, label)
+  }
   for (const file of [path.join(f.root, '.npmrc'), f.env.NPM_CONFIG_USERCONFIG, f.env.NPM_CONFIG_GLOBALCONFIG]) {
     const before = fs.existsSync(file) ? fs.readFileSync(file) : null
     fs.writeFileSync(file, 'ignore-scripts=true\n')
-    assert.notEqual(f.key(), baseline, file)
+    assert.throws(() => f.key(), /requires native installation/, file)
     if (before) fs.writeFileSync(file, before)
     else fs.rmSync(file)
   }
@@ -184,14 +193,14 @@ test('main selects the profile only for the explicit supported managed modes', a
     assert.equal(result.hit, '', 'a profile never supplies an absent dependency tree')
     assert.equal(restores.length, 2, 'node_modules and download-cache materialization still run')
     assert.equal(JSON.parse(states.get('deps')).installProfile ?? null, admitted ? P.ID : null)
-    const want = admitted ? f.key(P.ID) : legacy.key(f.root, info, f.facts, {...f.env, GITHUB_WORKSPACE: f.root})
+    const want = admitted ? f.key(P.ID) : D.key(f.root, info, f.facts, {...f.env, GITHUB_WORKSPACE: f.root})
     assert.equal(result.key, want)
     if (admitted) selected.push(result.key)
   }
   assert.equal(selected[0], selected[1], 'replay and control have the same install policy')
 })
 
-test('managed binding.gyp and competing shrinkwrap decline all dependency-tree authority while off stays legacy', async t => {
+test('binding.gyp and competing shrinkwrap decline dependency-tree authority in every mode', async t => {
   const f = fixture(t)
   const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8')
   const source = main.slice(main.indexOf('async function dependencies('), main.indexOf('\n// The task cache:'))
@@ -205,28 +214,22 @@ test('managed binding.gyp and competing shrinkwrap decline all dependency-tree a
     f.write(0); update()
     const restores = [], states = [], messages = []
     const result = await vm.runInNewContext(source + '; dependencies(' + JSON.stringify(f.facts) + ')', {
-      D: mode === 'off' ? D : {...D, key: () => { throw new Error('a declined managed install must not compute a cache key') }},
+      D: {...D, key: () => { throw new Error('a declined install must not compute a cache key') }},
       fs, path, crypto, Date, process: {platform: 'linux', arch: 'x64', env: {...f.env, GITHUB_WORKSPACE: f.root}, cwd: () => f.root},
       core: {getInput: name => name === 'managed-vitest' ? mode : '', info: value => messages.push(value), saveState: (...args) => states.push(args)},
       cache: {restoreCache: async (...args) => { restores.push(args); return undefined }},
       cacheNamespace: () => 'fixture-', maySave: () => true, home: () => f.base,
     })
-    if (mode === 'off') {
-      assert.equal(result.key, legacy.key(f.root, info, f.facts, f.env))
-      assert.equal(restores.length, 2); assert.equal(states.length, 1)
-      assert.equal(result.installProfile, undefined)
-    } else {
-      assert.equal(result, null)
-      assert.deepEqual(restores, []); assert.deepEqual(states, [])
-      assert.match(messages.join('\n'), /no dependency tree is restored or saved, and native npm ci runs/)
-    }
+    assert.equal(result, null)
+    assert.deepEqual(restores, []); assert.deepEqual(states, [])
+    assert.match(messages.join('\n'), /no dependency tree is restored or saved, and native npm ci runs/)
   }
 })
 
 function invokeHook(f, {tree = true, marker = true, mutate, args = ['ci']} = {}) {
   f.write(0)
-  const base = path.join(f.base, 'hook'), npm = path.join(base, 'npm'), bin = path.join(npm, 'bin/npm-cli.js')
-  fs.mkdirSync(path.dirname(bin), {recursive: true}); fs.writeFileSync(bin, '')
+  const base = path.join(f.base, 'hook'), npm = f.npm, bin = path.join(npm, 'bin/npm-cli.js')
+  fs.mkdirSync(base, {recursive: true})
   fs.writeFileSync(path.join(npm, 'package.json'), JSON.stringify({version: f.facts.npm}))
   const key = f.key(), nm = path.join(f.root, 'node_modules')
   if (tree) {
@@ -235,14 +238,14 @@ function invokeHook(f, {tree = true, marker = true, mutate, args = ['ci']} = {})
     if (marker) fs.writeFileSync(path.join(nm, '.quod-deps.json'), JSON.stringify({key, args: [], npm: f.facts.npm}))
   }
   const st = {root: f.root, ws: f.root, pm: 'npm', info, key, installProfile: P.ID,
-    facts: f.facts, paths: D.npmPaths(f.root, f.root, P.ID), hit: 'exact', print: D.treePrint(f.root)}
+    facts: f.facts, paths: D.npmPaths(f.root, f.root, P.ID), hit: 'exact', print: D.fullPrint(f.root, D.npmPaths(f.root, f.root, P.ID))}
   fs.writeFileSync(path.join(base, 'deps.json'), JSON.stringify(st))
   if (mutate) mutate({nm, npm, st})
   const stopped = {}, messages = [], listeners = [], exits = []
   try {
     vm.runInNewContext(npmCi + '; npmCi(' + JSON.stringify(bin) + ', ' + JSON.stringify(args) + ')', {
       __dirname: base, require: name => name.endsWith('deps.cjs') ? D : require(name), console: {log: value => messages.push(value)},
-      process: {version: f.facts.node, execPath: process.execPath, env: f.env, cwd: () => f.root,
+      process: {version: f.facts.node, execPath: f.facts.bin, env: f.env, cwd: () => f.root,
         on: (name, callback) => listeners.push([name, callback]), exit: code => { exits.push(code); throw stopped }},
     })
   } catch (error) { if (error !== stopped) throw error }
@@ -259,7 +262,7 @@ test('the npm hook requires an actual restored tree, marker, arguments and uncha
     fs.rmSync(path.join(f.root, 'packages/convex-helpers/package.json'))
   }})
   assert.deepEqual(equivalent.exits, [0], 'the reviewed c0 to c5 install projection can use the materialized tree')
-  for (const options of [{tree: false}, {marker: false}, {args: ['ci', '--ignore-scripts']},
+  for (const options of [{tree: false}, {marker: false},
     {mutate: ({nm}) => fs.mkdirSync(path.join(nm, 'changed-after-restore'))},
     {mutate: () => changePackage(f.root, pkg => { pkg.scripts.prepare = 'node observe.mjs' })},
     {mutate: () => fs.writeFileSync(path.join(f.root, 'package-lock.json'), window.blobs[window.commits[11].files['package-lock.json']])},
@@ -271,4 +274,7 @@ test('the npm hook requires an actual restored tree, marker, arguments and uncha
     result.listeners[0][1](1)
     assert.equal(fs.existsSync(path.join(result.base, 'deps-installed.json')), false, 'a failed native install cannot mint authority')
   }
+  const unsupported = invokeHook(f, {args: ['ci', '--ignore-scripts']})
+  assert.deepEqual(unsupported.exits, [])
+  assert.equal(unsupported.listeners.length, 0, 'unsupported install arguments grant no tree authority')
 })

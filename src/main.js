@@ -134,15 +134,10 @@ async function dependencies(facts) {
   const info = D.detect(root)
   const t0 = Date.now()
   const managedMode = core.getInput('managed-vitest') || 'off'
-  if (info.pm === 'npm' && ['v0', 'control', 'matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control'].includes(managedMode)) {
-    const present = name => {
-      try { fs.lstatSync(path.join(root, name)); return true }
-      catch (error) { if (error.code === 'ENOENT') return false; throw error }
-    }
-    const reason = present('binding.gyp') ? 'root binding.gyp can add an implicit install'
-      : present('package-lock.json') && present('npm-shrinkwrap.json') ? 'npm-shrinkwrap.json overrides package-lock.json' : null
+  if (info.pm === 'npm') {
+    const reason = D.npmInstallUnsafe(root, info, facts, process.env)
     if (reason) {
-      core.info(`Quod managed dependencies: ${reason}; no dependency tree is restored or saved, and native npm ci runs`)
+      core.info(`Quod dependencies: ${reason}; no dependency tree is restored or saved, and native npm ci runs`)
       return null
     }
   }
@@ -151,7 +146,7 @@ async function dependencies(facts) {
   const key = D.key(root, info, facts, process.env, installProfile)
   const os = `${process.platform}-${process.arch}`
   const namespace = cacheNamespace()
-  const st = { ws, root: fs.realpathSync(root), info, pm: info.pm, key, facts: { node: facts.node, npm: facts.npm }, hit: '', save: maySave() }
+  const st = { ws, root: fs.realpathSync(root), info, pm: info.pm, key, facts: { node: facts.node, npm: facts.npm, bin: facts.bin }, hit: '', save: maySave() }
   if (installProfile) {
     st.installProfile = installProfile
     core.info(`Quod dependencies: reviewed npm install profile ${installProfile}; build and test inputs remain independently checked`)
@@ -167,7 +162,7 @@ async function dependencies(facts) {
     } else {
       const hit = await cache.restoreCache(st.paths.slice(), st.cacheKey)
       st.hit = hit ? 'exact' : ''
-      if (hit) st.print = D.treePrint(root)
+      if (hit) st.print = D.fullPrint(ws, st.paths)
       core.info(
         hit
           ? `Quod dependencies: node_modules restored for this lockfile (${key.slice(0, 12)}) in ${((Date.now() - t0) / 1000).toFixed(1)} s; \`npm ci\` will find it in place`

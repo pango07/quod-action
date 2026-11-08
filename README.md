@@ -8,6 +8,13 @@ results do not change the published `v2` release. Quod is a GitHub Action
 inside your existing runner; acceleration depends on the workload and replay
 eligibility. Cold recording and confirmation can make a job slower.
 
+Production readiness is still being validated. This branch is preparing a
+fresh-runner acceptance gate for the committed Action bundles: native results,
+two recording witnesses, replay, dependency-cache reuse, signed Cloud ledger
+readback and native fallback. Passing a finite fixture does not establish
+support for every repository or configuration, and does not establish net
+CI cost savings. Coverage remains outside this initial acceptance gate.
+
 The bundled experimental engine now includes the
 [metadata-only replay correction](https://github.com/pango07/quod/blob/exp/boolean-exports-codex/docs/bench/stat-metadata-regression.md).
 Its performance must be remeasured; earlier benchmark savings used an older engine.
@@ -50,8 +57,11 @@ jobs:
 third-party actions. Replace `<sha>` with the commit the `v2` tag points to:
 
 ```sh
-git ls-remote https://github.com/pango07/quod-action refs/tags/v2
+git ls-remote https://github.com/pango07/quod-action refs/tags/v2 'refs/tags/v2^{}'
 ```
+
+For an annotated tag, use the peeled `^{}` entry's commit SHA. For a
+lightweight tag, use the tag entry's SHA.
 
 The [v2 release](https://github.com/pango07/quod-action/releases/tag/v2) and
 the [quickstart](https://www.quodci.com/docs/quickstart) show it too.
@@ -123,6 +133,14 @@ In more detail, the action:
    the job, it saves what the install produced, but only from jobs on your
    own code (push, same-repository pull request, merge queue, dispatch,
    schedule).
+   npm workspace projects, local or linked dependencies, root `binding.gyp`,
+   competing npm lockfiles, custom npm configuration and unsupported
+   install inputs use native
+   installation. Quod does not restore or save their `node_modules` trees.
+   Unreviewed npm install arguments run native npm; they cannot skip an
+   install or authorize saving its dependency tree.
+   Safe npm trees use a new cache-key domain so earlier entries cannot
+   bypass these checks.
 2. **Task cache.** If the repository has a `turbo.json` or `nx.json`, the
    job has `id-token: write`, and none of `TURBO_API`, `TURBO_TOKEN`,
    `TURBO_TEAM`, `TURBO_TEAMID`, `NX_SELF_HOSTED_REMOTE_CACHE_SERVER`,
@@ -181,7 +199,7 @@ All inputs are optional.
 | --- | --- | --- |
 | `mode` | `check` | `check`: your test job. It replays what the ledger proves unchanged, then runs and records the rest. `shadow`: the older separate recording job, used inside `.github/workflows/shadow.yml`. It still works, and isn't needed any more. |
 | `record` | `true` | In `check` mode, record in this job. `false` only reads the ledger, for a setup that keeps the shadow job. |
-| `version` | `bin-15cb5ab` | The bundled experimental quod binary. Other versions use their pinned release archive. |
+| `version` | `bin-024b929` | The bundled experimental quod binary. Other versions use their pinned release archive. |
 | `sha256` | the pinned checksum | SHA-256 of that release's `quod-linux-x86_64.tar.gz`. Required when `version` is a release the action doesn't know. |
 | `cloud` | `true` | Keep the ledger in Quod Cloud when this quod supports it and the job has `id-token: write`. `false` keeps it in the Actions cache. |
 | `dependencies` | `true` | Restore and save what your install puts down: `node_modules` for npm, the store for pnpm, yarn and bun. `false` leaves your install alone. |

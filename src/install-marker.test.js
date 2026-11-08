@@ -18,7 +18,8 @@ test('successful fresh installs expose the same marker before build as restored 
     fs.writeFileSync(path.join(npm, 'package.json'), '{"version":"11"}')
     fs.writeFileSync(path.join(root, 'deps.json'), JSON.stringify({ pm: 'npm', root, ws: root, paths: [], facts: { npm: '11' } }))
     let done
-    const D = { NPM_CI: ['ci'], npmArgs: x => x, key: () => 'key', fullPrint: () => 'print' }
+    const D = { NPM_CI: ['ci'], npmCiOutputOnly: () => true, npmCliMatches: () => true,
+      npmArgs: x => x, key: () => 'key', fullPrint: () => 'print' }
     const context = { __dirname: root, require: n => n.endsWith('deps.cjs') ? D : require(n),
       process: { cwd: () => root, version: process.version, execPath: process.execPath, on: (name, fn) => { assert.equal(name, 'exit'); done = fn } } }
     vm.runInNewContext(source + '; npmCi(' + JSON.stringify(bin) + ', ["ci"])', context)

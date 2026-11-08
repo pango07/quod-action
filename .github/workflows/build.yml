@@ -31,10 +31,22 @@ jobs:
           persist-credentials: false
       - name: Install Action dependencies and build bundles
         run: |
-          npm install --no-audit --no-fund
+          set -euo pipefail
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
           rm -rf dist/managed-bridge
           rm -rf dist/matrix-bridge
           npm run build
+      - name: Freeze the production fixture dependency tree
+        run: |
+          set -euo pipefail
+          test -f product-fixture/package.json
+          if [ ! -f product-fixture/package-lock.json ]; then
+            npm install --package-lock-only --ignore-scripts --no-audit --no-fund --prefix product-fixture
+          fi
       - name: Install pinned managed dependencies
         working-directory: .build/source/scripts/bench-vitest/managed
         run: npm ci --no-audit --no-fund
@@ -58,9 +70,13 @@ jobs:
         run: node --test src/*.test.js
       - name: Commit reviewed-branch build output
         run: |
-          git add -f dist
+          set -euo pipefail
+          # A first build records dependency resolution; later builds use npm ci.
+          # Product consumers use the committed bundles and never rebuild them.
+          git diff --exit-code -- . ':!dist' ':!package-lock.json' ':!product-fixture/package-lock.json'
+          git add -f dist package-lock.json product-fixture/package-lock.json
           if git diff --cached --quiet; then exit 0; fi
-          git -c user.name="OpenAI Codex" -c user.email="juliovaught@yahoo.com" commit -m "Build optional managed Vitest Action at ${GITHUB_SHA::7}" -m "Co-Authored-By: OpenAI Codex <noreply@openai.com>"
+          git -c core.hooksPath=/dev/null -c user.name="Julio Vaught" -c user.email="juliovaught@yahoo.com" commit -m "Build Quod Action at ${GITHUB_SHA::7}" -m "Co-Authored-By: OpenAI Codex <noreply@openai.com>"
           git push origin "HEAD:${GITHUB_REF_NAME}"
   npm-install-equivalence:
     if: github.ref == 'refs/heads/exp/npm-install-equivalence-sol-ultra' && inputs['npm-install-equivalence']

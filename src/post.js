@@ -57,7 +57,7 @@ async function dependencies() {
     } catch {}
     if (!installed) return core.info('Quod dependencies: no `npm ci` finished in this job; nothing saved')
     if (installed.key !== st.key) return core.info('Quod dependencies: the install ran on other inputs than the job started with; nothing saved')
-    const unsafe = D.npmUnsafe(st.root)
+    const unsafe = D.npmUnsafe(st.root, st.facts, process.env)
     if (unsafe) return core.info(`Quod dependencies: node_modules is not saved: ${unsafe}`)
     if (D.fullPrint(st.ws, st.paths) !== installed.print) return core.info('Quod dependencies: node_modules changed after `npm ci`; not saved')
     fs.writeFileSync(path.join(st.root, 'node_modules', '.quod-deps.json'), JSON.stringify({ key: st.key, args: installed.args, npm: st.facts.npm }))

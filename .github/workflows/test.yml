@@ -8,8 +8,15 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      production-readiness:
+        description: Fresh-job shipped ordinary-native and signed Cloud acceptance
+        type: boolean
+        required: false
+        default: false
 jobs:
   check:
+    if: ${{ !inputs.production-readiness }}
     runs-on: ubuntu-latest
     # The README's set-up: Quod Cloud carries the ledger (the Actions cache
     # is the fallback when the server is not reachable or this repository is
@@ -49,3 +56,383 @@ jobs:
           if npx vitest run tests/fail.test.js; then echo "::error::a failing test passed"; exit 1; fi
           rm tests/fail.test.js
 
+
+  product-plain:
+    if: ${{ inputs.production-readiness }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRODUCT_WITNESS_SCOPE: ${{ github.run_id }}-${{ github.run_attempt }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /product-fixture/
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: .quod-action
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.18.0
+      - name: Require the exact shipped Action and tracked customer fixture lock
+        run: node .quod-action/test/product-readiness-layout.mjs
+      - name: Require the actual install or exact dependency-cache skip
+        run: node .quod-action/test/product-readiness-install.mjs plain "$RUNNER_TEMP/product-readiness-plain"
+      - name: Capture plain complete native results and actual replay statistics
+        run: node .quod-action/test/product-readiness-run.mjs plain "$RUNNER_TEMP/product-readiness-plain"
+      - name: Retain only sanitized synthetic plain evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: product-readiness-plain
+          path: |
+            ${{ runner.temp }}/product-readiness-plain/result.json
+            ${{ runner.temp }}/product-readiness-plain/installation.json
+          if-no-files-found: error
+          retention-days: 3
+
+  product-record:
+    if: ${{ inputs.production-readiness }}
+    needs: product-plain
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRODUCT_WITNESS_SCOPE: ${{ github.run_id }}-${{ github.run_attempt }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /product-fixture/
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: .quod-action
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.18.0
+      - name: Require the exact shipped Action and tracked customer fixture lock
+        run: node .quod-action/test/product-readiness-layout.mjs
+      - name: Use the shipped default ordinary-native Action
+        uses: ./.quod-action
+        with:
+          cache-namespace: product-readiness-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Require the actual install or exact dependency-cache skip
+        run: node .quod-action/test/product-readiness-install.mjs record "$RUNNER_TEMP/product-readiness-record"
+      - name: Capture record complete native results and actual replay statistics
+        run: node .quod-action/test/product-readiness-run.mjs record "$RUNNER_TEMP/product-readiness-record"
+      - name: Retain only sanitized synthetic record evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: product-readiness-record
+          path: |
+            ${{ runner.temp }}/product-readiness-record/result.json
+            ${{ runner.temp }}/product-readiness-record/installation.json
+          if-no-files-found: error
+          retention-days: 3
+
+  product-witness:
+    if: ${{ inputs.production-readiness }}
+    needs: product-record
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRODUCT_WITNESS_SCOPE: ${{ github.run_id }}-${{ github.run_attempt }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /product-fixture/
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: .quod-action
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.18.0
+      - name: Require the exact shipped Action and tracked customer fixture lock
+        run: node .quod-action/test/product-readiness-layout.mjs
+      - name: Use the shipped default ordinary-native Action
+        uses: ./.quod-action
+        with:
+          cache-namespace: product-readiness-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Require the actual install or exact dependency-cache skip
+        run: node .quod-action/test/product-readiness-install.mjs witness "$RUNNER_TEMP/product-readiness-witness"
+      - name: Capture witness complete native results and actual replay statistics
+        run: node .quod-action/test/product-readiness-run.mjs witness "$RUNNER_TEMP/product-readiness-witness"
+      - name: Retain only sanitized synthetic witness evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: product-readiness-witness
+          path: |
+            ${{ runner.temp }}/product-readiness-witness/result.json
+            ${{ runner.temp }}/product-readiness-witness/installation.json
+          if-no-files-found: error
+          retention-days: 3
+
+  product-replay:
+    if: ${{ inputs.production-readiness }}
+    needs: product-witness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRODUCT_WITNESS_SCOPE: ${{ github.run_id }}-${{ github.run_attempt }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /product-fixture/
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: .quod-action
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.18.0
+      - name: Require the exact shipped Action and tracked customer fixture lock
+        run: node .quod-action/test/product-readiness-layout.mjs
+      - name: Use the shipped default ordinary-native Action
+        uses: ./.quod-action
+        with:
+          cache-namespace: product-readiness-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Require the actual install or exact dependency-cache skip
+        run: node .quod-action/test/product-readiness-install.mjs replay "$RUNNER_TEMP/product-readiness-replay"
+      - name: Capture replay complete native results and actual replay statistics
+        run: node .quod-action/test/product-readiness-run.mjs replay "$RUNNER_TEMP/product-readiness-replay"
+      - name: Retain only sanitized synthetic replay evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: product-readiness-replay
+          path: |
+            ${{ runner.temp }}/product-readiness-replay/result.json
+            ${{ runner.temp }}/product-readiness-replay/installation.json
+          if-no-files-found: error
+          retention-days: 3
+
+  product-changed:
+    if: ${{ inputs.production-readiness }}
+    needs: product-fallback
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRODUCT_WITNESS_SCOPE: ${{ github.run_id }}-${{ github.run_attempt }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /product-fixture/
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: .quod-action
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.18.0
+      - name: Require the exact shipped Action and tracked customer fixture lock
+        run: node .quod-action/test/product-readiness-layout.mjs
+      - name: Use the shipped default ordinary-native Action
+        uses: ./.quod-action
+        with:
+          cache-namespace: product-readiness-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Require the actual install or exact dependency-cache skip
+        run: node .quod-action/test/product-readiness-install.mjs changed "$RUNNER_TEMP/product-readiness-changed"
+      - name: Capture changed complete native results and actual replay statistics
+        run: node .quod-action/test/product-readiness-run.mjs changed "$RUNNER_TEMP/product-readiness-changed"
+      - name: Retain only sanitized synthetic changed evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: product-readiness-changed
+          path: |
+            ${{ runner.temp }}/product-readiness-changed/result.json
+            ${{ runner.temp }}/product-readiness-changed/installation.json
+          if-no-files-found: error
+          retention-days: 3
+
+  product-fallback:
+    if: ${{ inputs.production-readiness }}
+    needs: product-cloud
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRODUCT_WITNESS_SCOPE: ${{ github.run_id }}-${{ github.run_attempt }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /product-fixture/
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: .quod-action
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.18.0
+      - name: Require the exact shipped Action and tracked customer fixture lock
+        run: node .quod-action/test/product-readiness-layout.mjs
+      - name: Use the shipped default ordinary-native Action
+        uses: ./.quod-action
+        with:
+          cache-namespace: product-readiness-${{ github.run_id }}-${{ github.run_attempt }}
+          server: http://127.0.0.1:1
+      - name: Require the actual install or exact dependency-cache skip
+        run: node .quod-action/test/product-readiness-install.mjs fallback "$RUNNER_TEMP/product-readiness-fallback"
+      - name: Capture fallback complete native results and actual replay statistics
+        run: node .quod-action/test/product-readiness-run.mjs fallback "$RUNNER_TEMP/product-readiness-fallback"
+      - name: Retain only sanitized synthetic fallback evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: product-readiness-fallback
+          path: |
+            ${{ runner.temp }}/product-readiness-fallback/result.json
+            ${{ runner.temp }}/product-readiness-fallback/installation.json
+          if-no-files-found: error
+          retention-days: 3
+
+  product-cloud:
+    if: ${{ inputs.production-readiness }}
+    needs: product-replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRODUCT_WITNESS_SCOPE: ${{ github.run_id }}-${{ github.run_attempt }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /product-fixture/
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: .quod-action
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.18.0
+      - name: Require the exact shipped Action and tracked customer fixture lock
+        run: node .quod-action/test/product-readiness-layout.mjs
+      # Run before the changed-input failure can publish a newer ledger.
+      # No Action, install, cache restore or preexisting local ledger exists.
+      - name: Read only the sanitized current cold-record state reference
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: product-readiness-record
+          path: ${{ runner.temp }}/product-readiness-record-reference
+      - name: Require signed Cloud readback into empty directories and reject a wrong key
+        run: >-
+          node .quod-action/test/product-readiness-cloud.mjs
+          "$RUNNER_TEMP/product-readiness-cloud"
+          "$RUNNER_TEMP/product-readiness-record-reference/result.json"
+      - name: Retain only sanitized signed-readback metadata
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: product-readiness-cloud
+          path: ${{ runner.temp }}/product-readiness-cloud/cloud-readback.json
+          if-no-files-found: error
+          retention-days: 3
+
+  product-validator:
+    if: ${{ always() && inputs.production-readiness }}
+    needs: [product-plain, product-record, product-witness, product-replay, product-cloud, product-changed, product-fallback]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRODUCT_WITNESS_SCOPE: ${{ github.run_id }}-${{ github.run_attempt }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /product-fixture/
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: .quod-action
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.18.0
+      - name: Require the exact shipped Action and tracked customer fixture lock
+        run: node .quod-action/test/product-readiness-layout.mjs
+      - name: Read the seven sanitized fresh-job and signed-readback records
+        if: always()
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: product-readiness-*
+          path: ${{ runner.temp }}/product-readiness-inputs
+          merge-multiple: false
+      - name: Validate complete results, replay, native failure and signed transport
+        if: always()
+        run: >-
+          node .quod-action/test/product-readiness-validate.mjs
+          "$RUNNER_TEMP/product-readiness-inputs"
+          "$RUNNER_TEMP/product-readiness-inputs/product-readiness-cloud"
+          "$RUNNER_TEMP/product-readiness-validation"
+      - name: Retain only sanitized acceptance and signed-readback metadata
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: product-readiness-acceptance
+          path: ${{ runner.temp }}/product-readiness-validation/acceptance.json
+          if-no-files-found: error
+          retention-days: 3
