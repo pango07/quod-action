@@ -81,7 +81,7 @@ function project(root, info, requested, manifests) {
 }
 
 function select(root, info, mode, manifests) {
-  return ['v0', 'control', 'matrix-research', 'matrix-control'].includes(mode) && project(root, info, ID, manifests) ? ID : null
+  return ['v0', 'control', 'matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control'].includes(mode) && project(root, info, ID, manifests) ? ID : null
 }
 
 module.exports = {ID, select, project}

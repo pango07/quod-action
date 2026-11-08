@@ -38,7 +38,7 @@
   } catch {
     return
   }
-  if (['matrix-research', 'matrix-control'].includes(cfg.managed?.mode)) {
+  if (['matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control'].includes(cfg.managed?.mode)) {
     // Any other Vitest selection/reporting mode remains the original command.
     // Consume only our setup file before leaving it to native test execution.
     const session = path.join(__dirname, 'managed-cache-auth.json')
@@ -100,7 +100,7 @@
       [cfg.managed.bridge, path.join(__dirname, 'config.json'), entry, ...argv.slice(2)],
       {stdio: 'inherit', env: {...env, QUOD_SHIM_ACTIVE: '1'}})
     if (child.error) {
-      if (['matrix-research', 'matrix-control'].includes(cfg.managed.mode) &&
+      if (['matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control'].includes(cfg.managed.mode) &&
           cfg.managed.cacheAuth === path.join(__dirname, 'managed-cache-auth.json')) fs.rmSync(cfg.managed.cacheAuth, {force: true})
       console.error(`quod managed: could not start (${child.error.message}); running ordinary Vitest`)
       return

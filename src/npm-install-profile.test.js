@@ -54,6 +54,8 @@ test('the actual twelve source inputs admit ten equivalent installs and two depe
     assert.equal(f.profile('control'), P.ID, `control c${i}`)
     assert.equal(f.profile('matrix-research'), P.ID, `matrix research c${i}`)
     assert.equal(f.profile('matrix-control'), P.ID, `matrix control c${i}`)
+    assert.equal(f.profile('matrix-property47'), P.ID, `property47 research c${i}`)
+    assert.equal(f.profile('matrix-property47-control'), P.ID, `property47 control c${i}`)
     keys.push(f.key())
     old.push(legacy.key(f.root, info, f.facts, f.env))
     paths.push(D.npmPaths(f.root, f.root, f.profile()))
@@ -162,10 +164,12 @@ test('main selects the profile only for the explicit supported managed modes', a
   for (const [managed, mode, platform, arch, admitted] of [
     ['v0', 'check', 'linux', 'x64', true], ['control', 'check', 'linux', 'x64', true],
     ['matrix-research', 'check', 'linux', 'x64', true], ['matrix-control', 'check', 'linux', 'x64', true],
+    ['matrix-property47', 'check', 'linux', 'x64', true], ['matrix-property47-control', 'check', 'linux', 'x64', true],
     ['off', 'check', 'linux', 'x64', false], ['future', 'check', 'linux', 'x64', false],
     ['v0', 'shadow', 'linux', 'x64', false], ['v0', 'check', 'darwin', 'arm64', false],
     ['control', 'check', 'linux', 'arm64', false], ['matrix-research', 'shadow', 'linux', 'x64', false],
     ['matrix-control', 'check', 'darwin', 'x64', false],
+    ['matrix-property47', 'shadow', 'linux', 'x64', false], ['matrix-property47-control', 'check', 'linux', 'arm64', false],
   ]) {
     f.write(0)
     const restores = [], states = new Map(), inputs = {'managed-vitest': managed, mode}
@@ -197,7 +201,7 @@ test('managed binding.gyp and competing shrinkwrap decline all dependency-tree a
     () => fs.writeFileSync(path.join(f.root, 'npm-shrinkwrap.json'), '{}'),
     () => fs.symlinkSync('missing-shrinkwrap', path.join(f.root, 'npm-shrinkwrap.json')),
   ]
-  for (const update of variants) for (const mode of ['v0', 'control', 'matrix-research', 'matrix-control', 'off']) {
+  for (const update of variants) for (const mode of ['v0', 'control', 'matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control', 'off']) {
     f.write(0); update()
     const restores = [], states = [], messages = []
     const result = await vm.runInNewContext(source + '; dependencies(' + JSON.stringify(f.facts) + ')', {

@@ -270,3 +270,25 @@ ordinary; later invocations execute ordinary once it has been consumed. This is
 not isolation from a hostile same-UID native workflow. Off/v0 retain their own
 existing behavior. The proven finite npm install equivalence remains a separate
 dependency-materialization decision and never supplies test/build authority.
+
+### Finite property47 profile
+
+`managed-vitest: matrix-property47` and `matrix-property47-control` use reviewed
+runtime `f67fe14033de76f0b26b436cef4e5d50b0af1ee3`. Its finite GitHub gate
+[42430045283](https://github.com/pango07/quod/actions/runs/42430045283) and two
+independent data audits preserve all original 120 files and 4,131 test states.
+The profile uses synthetic cache authority in that runtime gate; actual SDK and
+complete Action job measurements require the separate packaged gate. These
+modes retain the complete original 120 project/file/pool selection and select
+only the reviewed 47-test `convex-helpers` stream property instance as a managed
+candidate. Its explicit profile label is bound into both the collection scope
+and the runtime execution identity. It cannot share a receipt collection with
+the default 108 profile in the same Action build.
+
+A cold candidate still receives actual native conformance; a passing replay
+leaves 119 instances to native Vitest. The control performs neither receipt SDK
+operations nor receipt writes. The ordinary npm script, build, release tests,
+exact-root-run guard, private-session consumption and bounded SDK transport stay
+on the existing path. This is not full-job replay or evidence for a new
+full-window speedup. Default `off`, v0 and the default 108 matrix modes keep
+their existing behavior. No listener concurrency is enabled by these modes.

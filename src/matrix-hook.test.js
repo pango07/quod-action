@@ -32,7 +32,7 @@ function invoke(t, {args = ['run'], mode = 'matrix-research', version = '5.0.0',
   return {base, bridge, entry, session, calls, exit}
 }
 test('explicit matrix modes forward only exact default root run and preserve child failure', t => {
-  for (const mode of ['matrix-research', 'matrix-control']) {
+  for (const mode of ['matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control']) {
     const f = invoke(t, {mode, status: 1})
     assert.equal(f.exit, 1); assert.equal(f.calls.length, 1)
     assert.deepEqual(f.calls[0].argv, [f.bridge, path.join(f.base, 'config.json'), f.entry, 'run'])
@@ -40,21 +40,24 @@ test('explicit matrix modes forward only exact default root run and preserve chi
   }
 })
 test('reporters, filters, watch, other versions and nested invocations remain ordinary and consume the setup session', t => {
-  for (const options of [
+  const declined = [
     {args: ['run', '--reporter=json']}, {args: ['run', '--outputFile=x.json']},
     {args: ['run', 'one.test.ts']}, {args: ['run', '--project=zod-4.0']},
     {args: ['run', '--coverage']}, {args: ['watch']}, {args: []},
     {version: '5.0.1'}, {version: '6.0.0'}, {nested: true},
-  ]) {
-    const f = invoke(t, options)
+  ]
+  for (const mode of ['matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control']) for (const options of declined) {
+    const f = invoke(t, {...options, mode})
     assert.equal(f.calls.length, 0, JSON.stringify(options)); assert.equal(f.exit, undefined)
     assert.equal(fs.existsSync(f.session), false)
   }
 })
 test('a consumed session makes later root commands ordinary; inability to spawn a bridge remains ordinary', t => {
-  const later = invoke(t, {consumed: true})
-  assert.equal(later.calls.length, 0); assert.equal(later.exit, undefined)
-  const failed = invoke(t, {childError: true})
-  assert.equal(failed.calls.length, 1); assert.equal(failed.exit, undefined)
-  assert.equal(fs.existsSync(failed.session), false)
+  for (const mode of ['matrix-research', 'matrix-control', 'matrix-property47', 'matrix-property47-control']) {
+    const later = invoke(t, {mode, consumed: true})
+    assert.equal(later.calls.length, 0); assert.equal(later.exit, undefined)
+    const failed = invoke(t, {mode, childError: true})
+    assert.equal(failed.calls.length, 1); assert.equal(failed.exit, undefined)
+    assert.equal(fs.existsSync(failed.session), false)
+  }
 })
