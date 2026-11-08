@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {spawnSync} from 'node:child_process'
 import {ARGS, MARKER, configuration, fixture, json, ledgerDirectory, pins, publicScopeEvidence, report, runIdentity, sha, summary, summaryFile, write} from './product-readiness-common.mjs'
+import {captureProductDiagnostics} from './product-readiness-diagnostics.mjs'
 
 const [role, output] = process.argv.slice(2)
 assert(['plain', 'record', 'witness', 'replay', 'changed', 'fallback'].includes(role) && output)
@@ -21,6 +22,7 @@ try {
     if (disable) env.QUOD_DISABLE = '1'
     else delete env.QUOD_DISABLE
     const child = spawnSync('npm', args, {cwd: fixture(), env, encoding: 'utf8', timeout: 180000, maxBuffer: 8 * 1024 * 1024})
+    if (role !== 'plain' && !disable && !unsupported) result.diagnostics = captureProductDiagnostics()
     assert(!child.error && child.signal === null, 'test command must settle normally inside its bound')
     assert.equal(child.status, failing ? 1 : 0)
     const outputText = `${child.stdout ?? ''}\n${child.stderr ?? ''}`
@@ -65,4 +67,12 @@ try {
   // Fixed diagnostic text only: never publish CLI output, config or credential values.
   result.error = {name: error.name, message: String(error.message).slice(0, 1000)}
   process.exitCode = 1
-} finally {write(path.join(output, 'result.json'), result)}
+} finally {
+  if (result.diagnostics?.ledger && Buffer.byteLength(JSON.stringify(result, null, 2) + '\n') > 256 * 1024)
+    result.diagnostics.ledger = {available: false, decline: 'ledger-output-cap', maxBytes: 256 * 1024}
+  if (result.diagnostics && Buffer.byteLength(JSON.stringify(result, null, 2) + '\n') > 256 * 1024) {
+    result.diagnostics = {schema: 'quod-product-native-post-command-diagnostics-v1', available: false,
+      decline: 'role-record-output-cap', maxBytes: 256 * 1024}
+  }
+  write(path.join(output, 'result.json'), result)
+}
